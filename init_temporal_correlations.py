@@ -25,18 +25,22 @@ eod_data, mask_data, gt_data, price_data = \
 corr_size = 30
 num_companies, num_timesteps = gt_data.shape
 correlation_matrix_shape = (num_timesteps - corr_size, num_companies, num_companies)
-corr = np.zeros(correlation_matrix_shape)
+corr = np.ones(correlation_matrix_shape)
 print(corr.shape)
 
+iu = np.triu_indices(num_companies,k=1)
+il = (iu[1],iu[0])
+
 for t in tqdm(range(num_timesteps - corr_size)):
-    for c1 in tqdm(range(0, num_companies)):
-        for c2 in range(1, num_companies - 1):
+    for c1 in tqdm(range(num_companies)):
+        for c2 in range(1, num_companies - c1):
             c1_movements = gt_data.T[t:t+corr_size][:,c1]
-            c2_movements = gt_data.T[t:t+corr_size][:,c2]
+            c2_movements = gt_data.T[t:t+corr_size][:,c1 + c2]
             c1_c2_corr = pearsonr(c1_movements, c2_movements)[0]
             if np.isnan(c1_c2_corr):
                 c1_c2_corr = 1e-10
-            corr[t][c1][c2] = c1_c2_corr
+            corr[t][c1][c1 + c2] = c1_c2_corr        
+    corr[t][il] = corr[t][iu]
 
 # save
 save_file_path = '../data/correlation_init.pkl'
