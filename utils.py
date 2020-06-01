@@ -1,7 +1,10 @@
 import numpy as np
 
 def best_return(pct_returns, daily_investment=100, skip_n_steps=0):
-    """Calculates the optimal return possible for the given parameters. 
+    """Calculates the optimal return possible for the given parameters. The output 
+    reflects a policy of buying the `daily_investment` amount of the stock with 
+    the highest return each timestep and selling it at the same timestep to realize 
+    the return. This removes the effect of compounding returns. 
 
     Keyword arguments:
     pct_returns      -- np.array of dim: (num_companies, num_timesteps), containing
@@ -14,6 +17,9 @@ def best_return(pct_returns, daily_investment=100, skip_n_steps=0):
 
 def avg_return(pct_returns, daily_investment=100, skip_n_steps=0):
     """Calculates the average return (i.e. the return of holding the entire index).
+    The output reflects a policy of buying the `daily_investment` amount of the 
+    index average at each timestep and selling it at the same timestep to realize 
+    the return. This removes the effect of compounding returns. 
 
     Keyword arguments:
     pct_returns      -- np.array of dim: (num_companies, num_timesteps), containing

@@ -6,9 +6,16 @@ Final project repo for UCLA CS 267A
 
 [tutorials_colab](https://colab.research.google.com/drive/11kPl_81fmaIqoUH48Ozl3N83uXqL7xXO) # use this notebook for examples of GNN applications
 
+# Datasets
+
+| index | num_companies | num_timesteps (T) | 
+|---|---|---|
+| NASDAQ | 1026 | 1245 | 
+| NYSE | 1737 | 1245 | 
+
 # Target Returns
 
-We present the target returns for two values of `skip_n_steps` because our relational tensor truncates the first `n` points for the correlations starting at `T-n` where `T` is the total number of timesteps under evaluation.
+We present the target returns for two values of `skip_n_steps` because our relational tensor truncates the first `n` points for the correlations starting at `T-n` where `T` is the total number of timesteps under evaluation. The amounts reflect a policy of buying the `daily_investment` amount of the target stock(s) at each timestep and selling them at the same timestep. This removes the effect of compounding returns. 
 
 ## Optimal
 
