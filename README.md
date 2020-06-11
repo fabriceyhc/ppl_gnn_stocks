@@ -8,10 +8,47 @@ Final project repo for UCLA CS 267A
 
 # Datasets
 
-| index | num_companies | num_timesteps (T) | 
-|---|---|---|
-| NASDAQ | 1026 | 1245 | 
-| NYSE | 1737 | 1245 | 
+## Relational Data
+
+The current Wiki & Industry relation matrices from [TRSR](https://github.com/fulifeng/Temporal_Relational_Stock_Ranking) must be extracted with the following command within the `data` directory:
+
+```
+tar zxvf relation.tar.gz
+```
+
+```
+relation
+     sector_industry
+          NASDAQ_industry_ticker.json
+          NYSE_industry_ticker.json
+          NASDAQ_industry_relation.npy
+          NYSE_industry_relation.npy
+     wikidata
+          NASDAQ_wiki_relation.npy
+          NYSE_wiki_relation.npy
+          NYSE_connections.json
+          NASDAQ_connections.json
+          selected_wiki_connections.csv
+```
+
+In order to initialize our temporal relational tensors, you'll need to execute this command from the `training` directory, passing either "NYSE" or "NASDAQ" as an argument:
+
+```
+python init_temporal_correlations.py -market_name "NASDAQ"
+```
+
+NOTE: This will take a long time to execute and will result in massive tensors (~8hrs + 10GB for NASDAQ, ~24hrs + 29GB for NYSE).
+
+## High-level Statistics
+
+| index  | num_companies | num_timesteps (T) | 
+|--------|---------------|-------------------|
+| NASDAQ | 1026          | 1245              | 
+| NYSE   | 1737          | 1245              | 
+
+# Pretrained Weights
+
+The pretrained weights were too large to store in this repository, but they can be accessed [here](https://drive.google.com/file/d/1HpAsHH4oGdLrWeOby17pjVv3uIMe1TGh/view?usp=sharing).
 
 # Target Returns
 
