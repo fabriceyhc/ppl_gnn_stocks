@@ -7,9 +7,15 @@ import pickle
 
 from load_data import load_EOD_data, load_relation_data
 
+import argparse
+
+parser = argparse.ArgumentParser(description='Initialize temporal correlational tensor for stock price prediction.')
+parser.add_argument('-market_name', '-m', default='NASDAQ', help="options: ['NASDAQ', 'NYSE']")
+args = parser.parse_args()
+
 # params
 data_path = '../data/2013-01-01'
-market_name = 'NYSE' # 'NASDAQ', 'NYSE'
+market_name = args.market_name
 tickers_fname = market_name + '_tickers_qualify_dr-0.98_min-5_smooth.csv'
 steps = 1
 
