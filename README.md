@@ -13,6 +13,10 @@ Final project repo for UCLA CS 267A
 | NASDAQ | 1026 | 1245 | 
 | NYSE | 1737 | 1245 | 
 
+# Pretrained Weights
+
+The pretrained weights were too large to store in this repository, but they can be accessed [here](https://drive.google.com/file/d/1HpAsHH4oGdLrWeOby17pjVv3uIMe1TGh/view?usp=sharing).
+
 # Target Returns
 
 We present the target returns for two values of `skip_n_steps` because our relational tensor truncates the first `n` points for the correlations starting at `T-n` where `T` is the total number of timesteps under evaluation. The amounts reflect a policy of buying the `daily_investment` amount of the target stock(s) at each timestep and selling them at the same timestep. This removes the effect of compounding returns. 
