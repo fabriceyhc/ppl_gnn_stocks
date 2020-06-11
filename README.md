@@ -34,7 +34,7 @@ relation
 In order to initialize our temporal relational tensors, you'll need to execute this command from the `training` directory, passing either "NYSE" or "NASDAQ" as an argument:
 
 ```
-python init_temporal_correlations.py "NASDAQ"
+python init_temporal_correlations.py -market_name "NASDAQ"
 ```
 
 NOTE: This will take a long time to execute and will result in massive tensors (~8hrs + 10GB for NASDAQ, ~24hrs + 29GB for NYSE).
