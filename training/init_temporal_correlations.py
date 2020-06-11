@@ -4,11 +4,11 @@ import os
 from scipy.stats import pearsonr
 from tqdm import tqdm
 import pickle
+import argparse
 
 from load_data import load_EOD_data, load_relation_data
 
-import argparse
-
+# CLI args parser
 parser = argparse.ArgumentParser(description='Initialize temporal correlational tensor for stock price prediction.')
 parser.add_argument('-market_name', '-m', default='NASDAQ', help="options: ['NASDAQ', 'NYSE']")
 args = parser.parse_args()
