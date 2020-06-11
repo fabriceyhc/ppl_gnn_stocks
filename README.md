@@ -17,18 +17,19 @@ tar zxvf relation.tar.gz
 ```
 
 ```
-relation
-     sector_industry
-          NASDAQ_industry_ticker.json
-          NYSE_industry_ticker.json
-          NASDAQ_industry_relation.npy
-          NYSE_industry_relation.npy
-     wikidata
-          NASDAQ_wiki_relation.npy
-          NYSE_wiki_relation.npy
-          NYSE_connections.json
-          NASDAQ_connections.json
-          selected_wiki_connections.csv
+data
+     relation
+          sector_industry
+               NASDAQ_industry_ticker.json
+               NYSE_industry_ticker.json
+               NASDAQ_industry_relation.npy
+               NYSE_industry_relation.npy
+          wikidata
+               NASDAQ_wiki_relation.npy
+               NYSE_wiki_relation.npy
+               NYSE_connections.json
+               NASDAQ_connections.json
+               selected_wiki_connections.csv
 ```
 
 In order to initialize our temporal relational tensors, you'll need to execute this command from the `training` directory, passing either "NYSE" or "NASDAQ" as an argument:
@@ -54,6 +55,13 @@ Extract the file into the `data` directory:
 
 ```
 tar zxvf pretrain.tar.gz
+```
+
+```
+data
+     pretrain
+          NASDAQ_rank_lstm_seq-16_unit-64_2.csv.npy
+          NYSE_rank_lstm_seq-8_unit-32_0.csv.npy
 ```
 
 # Target Returns
