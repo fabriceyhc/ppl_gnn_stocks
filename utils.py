@@ -33,27 +33,27 @@ def avg_return(pct_returns, daily_investment=100, skip_n_steps=0):
     return np.sum(np.multiply(daily_investment, np.average(pct_returns.T, axis=1)[skip_n_steps:]))
 
 def load_corr_timestep(data_path='data/relation/correlations', market_name='NASDAQ', t=0):
-	'''
-	Loads the correlational matrix for a given timestep t as a PyTorch tensor
+    '''
+    Loads the correlational matrix for a given timestep t as a PyTorch tensor
 
-	Keyword arguments:
+    Keyword arguments:
     data_path   -- string path to the folder containing the numpy correlation matrices
     market_name -- string name of market, options: ['NASDAQ', 'NYSE']
     t           -- int representing the desired timestep
-	'''
+    '''
     load_path = os.path.join(data_path, market_name, os.listdir(os.path.join(data_path, market_name))[t])
     return torch.from_numpy(np.load(load_path)).float()
 
 def save_corr_timestep(data, save_path='data/relation/correlations', market_name='NASDAQ', t=0):
-	'''
-	Saves the correlational matrix for a given timestep t as an .npy file
-	**NOTE: Intended to store tensors after gradient adjustment.**
+    '''
+    Saves the correlational matrix for a given timestep t as an .npy file
+    **NOTE: Intended to store tensors after gradient adjustment.**
 
-	Keyword arguments:
-	data        -- PyTorch tensor to save
+    Keyword arguments:
+    data        -- PyTorch tensor to save
     save_path   -- string path to the destination folder of the PyTorch correlation matrices
     market_name -- string name of market, options: ['NASDAQ', 'NYSE']
     t           -- int representing the desired timestep
-	'''
+    '''
     save_path = os.path.join(save_path, market_name, market_name + '_correlation_init_' + str(t) + '.npy')
     np.save(save_path, data.cpu().numpy())
