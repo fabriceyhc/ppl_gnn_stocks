@@ -308,7 +308,7 @@ if __name__ == '__main__':
     if args.gpu == True:
         if torch.cuda.is_available():
             device = torch.device("cuda")
-    print('**training on', device, '**')
+    print('** training on', device, '**')
 
     args.inner_prod = (args.inner_prod == 1)
     params = {'seq': int(args.l), 'unit': int(args.u), 'lr': float(args.r),
