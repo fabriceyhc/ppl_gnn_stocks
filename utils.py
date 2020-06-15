@@ -55,5 +55,9 @@ def save_corr_timestep(data, save_path='data/relation/correlations', market_name
     market_name -- string name of market, options: ['NASDAQ', 'NYSE']
     t           -- int representing the desired timestep
     '''
-    save_path = os.path.join(save_path, market_name, market_name + '_correlation_init_' + str(t) + '.npy')
-    np.save(save_path, data.cpu().numpy())
+    # setup save directory
+    save_path = os.path.join(save_path, market_name)
+    if not os.path.exists(save_path):
+        os.makedirs(save_path)
+    save_file_path = os.path.join(save_path, market_name + '_correlation_init_' + str(t) + '.npy')
+    np.save(save_file_path, data.cpu().numpy())
