@@ -1,4 +1,6 @@
-# best_valid_pred = np.zeros(
+
+
+    # best_valid_pred = np.zeros(
 #     [len(self.tickers), self.test_index - self.valid_index],
 #     dtype=float
 # )
@@ -38,14 +40,6 @@ from time import time
 import os
 os.environ['KMP_WARNINGS'] = '0'
 # import psutil
-import tensorflow.compat.v1 as tf
-tf.logging.set_verbosity(tf.logging.ERROR)
-tf.disable_v2_behavior() 
-try:
-    from tensorflow.python.ops.nn_ops import leaky_relu
-except ImportError:
-    from tensorflow.python.framework import ops
-    from tensorflow.python.ops import math_ops
 
 import torch
 import torch.nn as nn
@@ -79,7 +73,7 @@ relu = nn.LeakyReLU(0.2)
 seed = 123456789
 np.random.seed(seed)
 
-tf.set_random_seed(seed)
+# tf.set_random_seed(seed)
 torch.manual_seed(seed)
 
 class TwoLayerNet(torch.nn.Module):
@@ -91,13 +85,13 @@ class TwoLayerNet(torch.nn.Module):
         seed = 123456789
         random.seed(seed)
         np.random.seed(seed)
-        tf.set_random_seed(seed)
         torch.manual_seed(seed)
 
         self.data_path = data_path
         self.market_name = market_name
         self.tickers_fname = tickers_fname
         self.relation_name = relation_name
+
         # load data
         self.tickers = np.genfromtxt(os.path.join(data_path, '..', tickers_fname),
                                      dtype=str, delimiter='\t', skip_header=False)
@@ -139,6 +133,8 @@ class TwoLayerNet(torch.nn.Module):
 
         self.gpu = gpu
         self.lrelu = nn.LeakyReLU(0.2)
+        self.batch_offsets = np.arange(start=0, stop=self.valid_index, dtype=int)
+        np.random.shuffle(self.batch_offsets)
         
         self.rel_weightlayer = nn.Linear(self.rel_encoding.shape[-1], 1)
         self.head_weightlayer = nn.Linear(self.parameter['unit'], 1)
@@ -172,7 +168,7 @@ class TwoLayerNet(torch.nn.Module):
         3. price_data with the same expansion o dimensions to make a tensor
         4. ground_truth data with the same expansion
         """
-        return self.embedding[:, offset, :],                 np.expand_dims(mask_batch, axis=1),                 np.expand_dims(
+        return self.embedding[:, offset, :], np.expand_dims(mask_batch, axis=1), np.expand_dims(
                     self.price_data[:, offset + seq_len - 1], axis=1
                 ), \
                 np.expand_dims(
@@ -181,12 +177,11 @@ class TwoLayerNet(torch.nn.Module):
     
     def forward(self, j):
         if self.gpu == True:
-            cuda = torch.device('cuda:0')
+            cuda = torch.device('cuda')
         else:
             device_name = 'cpu'
-#         print('device name:', device_name)
+        if j == 0: print('device name:', device_name)
 
-        #tf.reset_default_graph()
         # the ground truths, mask, features and base_price are placeholders of sizes [batchsize x 1], i.e. vectors
         ground_truth = torch.empty(self.batch_size, 1).to(device)
         mask = torch.empty(self.batch_size, 1).to(device)
@@ -198,9 +193,8 @@ class TwoLayerNet(torch.nn.Module):
         all_one = torch.ones([self.batch_size, 1], dtype=torch.float64).to(device)
 
         #Getting the data
-        batch_offsets = np.arange(start=0, stop=self.valid_index, dtype=int)
-        if j == 0: np.random.shuffle(batch_offsets)
-        emb_batch, mask_batch, price_batch, gt_batch = self.get_batch(batch_offsets[j])
+        
+        emb_batch, mask_batch, price_batch, gt_batch = self.get_batch(self.batch_offsets[j])
         
         # feature is a matrix of size [batchsize x parameters's unit]
         feature = torch.tensor(emb_batch).to(device)
@@ -215,8 +209,7 @@ class TwoLayerNet(torch.nn.Module):
         rel_mask = torch.FloatTensor(self.rel_mask).to(device)
 
         rel_weight = self.rel_weightlayer(relation).clamp(min = 0)
-        
-        
+
         
         if self.inner_prod:
 #             print('inner product weight')
@@ -249,7 +242,7 @@ class TwoLayerNet(torch.nn.Module):
         if self.flat:
             print('one more hidden layer')
             torch.cat(feature, outputs_proped, dim = 0)
-            outputs_concatedlayer = nn.Linear(feature.shape[-1], self.parameter['unit'])
+            # outputs_concatedlayer = nn.Linear(feature.shape[-1], self.parameter['unit'])
             outputs_concated =  self.lrelu(self.outputs_concatedlayer(torch.cat((feature, outputs_proped), 1)))
             
         else:
@@ -283,13 +276,9 @@ class TwoLayerNet(torch.nn.Module):
                 )
             )
         )
-#         print('reg_loss', reg_loss)
-#         print('parameters divide', self.parameter['alpha'] / rank_loss)
-#         print('parameters mult', self.parameter['alpha'] * rank_loss)
         
         # loss is then the parameters/rank_loss (scalar) + reg_loss, which was 
         # the MSE of ground truth and prediction rr's
-#         loss = reg_loss + self.parameter['alpha'] * rank_loss
         loss = reg_loss + self.parameter['alpha'] * rank_loss
         
         return loss, reg_loss, rank_loss
@@ -299,64 +288,107 @@ class TwoLayerNet(torch.nn.Module):
         well as arbitrary operators on Tensors.
         """
 
+if __name__ == '__main__':
+    desc = 'train a relational rank lstm model'
+    parser = argparse.ArgumentParser(description=desc)
+    parser.add_argument('-p', help='path of EOD data',
+                        default='../data/2013-01-01')
+    parser.add_argument('-m', help='market name', default='NASDAQ')
+    parser.add_argument('-t', help='fname for selected tickers')
+    parser.add_argument('-l', default=4,
+                        help='length of historical sequence for feature')
+    parser.add_argument('-u', default=64,
+                        help='number of hidden units in lstm')
+    parser.add_argument('-s', default=1,
+                        help='steps to make prediction')
+    parser.add_argument('-r', default=0.001,
+                        help='learning rate')
+    parser.add_argument('-a', default=1,
+                        help='alpha, the weight of ranking loss')
+    parser.add_argument('-g', '--gpu', type=int, default=0, help='use gpu')
 
-parameter = {'seq': int(16), 'unit': int(64), 'lr': float(0.01),
-              'alpha': float(0.1)}
-# Construct our model by instantiating the class defined above
-model = TwoLayerNet(data_path='../data/2013-01-01',
-    market_name='NASDAQ',
-    tickers_fname='NASDAQ' + '_tickers_qualify_dr-0.98_min-5_smooth.csv',
-    relation_name='wikidata',
-    emb_fname='NASDAQ_rank_lstm_seq-16_unit-64_2.csv.npy',
-    parameter=parameter,
-    steps=1, epochs=50, batch_size=None, gpu=False,
-    in_pro=0
-)
+    parser.add_argument('-e', '--emb_file', type=str,
+                        default='NASDAQ_rank_lstm_seq-16_unit-64_2.csv.npy',
+                        help='fname for pretrained sequential embedding')
+    parser.add_argument('-rn', '--rel_name', type=str,
+                        default='sector_industry',
+                        help='relation type: sector_industry or wikidata')
+    parser.add_argument('-ip', '--inner_prod', type=int, default=0)
+    args = parser.parse_args()
 
-model.to(device)
+    if args.t is None:
+        args.t = args.m + '_tickers_qualify_dr-0.98_min-5_smooth.csv'
+    args.gpu = (args.gpu == 1)
 
-# Construct our loss function and an Optimizer. The call to model.parameters()
-# in the SGD constructor will contain the learnable parameters of the two
-# nn.Linear modules which are members of the model.
+    args.inner_prod = (args.inner_prod == 1)
+    parameter = {'seq': int(args.l), 'unit': int(args.u), 'lr': float(args.r),
+                  'alpha': float(args.a)}
+    print('arguments:', args)
+    print('parameters:', parameter)
 
-criterion = torch.nn.MSELoss(reduction='sum')
-optimizer = torch.optim.Adam(model.parameters(), lr=parameter['lr'])
-epochs = 4
-steps = 1
-valid_index = 756
-
-T = valid_index - parameter['seq'] - steps + 1
-
-for i in range(1, epochs + 1):
-    t1 = time()
-    # random shuffling of the batch data
-    # np.random.shuffle(batch_offsets)
-    tra_loss = 0.0
-    tra_reg_loss = 0.0
-    tra_rank_loss = 0.0
+    # parameter = {'seq': int(16), 'unit': int(64), 'lr': float(0.01),
+    #             'alpha': float(0.1)}
     
-    for t in range(T):
-        # Forward pass: Compute predicted y by passing x to the model
-        cur_loss, cur_reg_loss, cur_rank_loss= model(j = t)
+    # Construct our model by instantiating the class defined above
+    model = TwoLayerNet(
+        data_path=args.p,
+        market_name=args.m,
+        tickers_fname=args.t,
+        relation_name=args.rel_name,
+        emb_fname=args.emb_file,
+        parameter=parameter,
+        steps=1, epochs=50, batch_size=None, gpu=args.gpu,
+        in_pro=args.inner_prod
+    )
 
-        # Compute and print loss
-        if t % 100 == 0:
-            loss = cur_loss.item() / T
-            print('Train Epoch: {} ({:.0f}%) \t Loss: {:.6f}'.format(
-                i, 100. * (t/T), loss))
-        
-        tra_loss += cur_loss
-        tra_reg_loss += cur_reg_loss
-        tra_rank_loss += cur_rank_loss
-        
-#         print('Train Loss:',
-#         tra_loss / (valid_index - parameter['seq'] - steps + 1),
-#         tra_reg_loss / (valid_index - parameter['seq'] - steps + 1),
-#         tra_rank_loss / (valid_index - parameter['seq'] - steps + 1))
-        
-        # Zero gradients, perform a backward pass, and update the weights.
-        optimizer.zero_grad()
-        cur_loss.backward()
-        optimizer.step()
+    model.to(device)
 
-print('training complete')
+    # Construct our loss function and an Optimizer. The call to model.parameters()
+    # in the SGD constructor will contain the learnable parameters of the two
+    # nn.Linear modules which are members of the model.
+
+    criterion = torch.nn.MSELoss(reduction='sum')
+    optimizer = torch.optim.Adam(model.parameters(), lr=parameter['lr'])
+    epochs = 4
+    steps = 1
+    valid_index = 756
+
+    T = valid_index - parameter['seq'] - steps + 1
+
+    for i in range(1, epochs + 1):
+        t1 = time()
+        # random shuffling of the batch data
+        tra_loss = 0.0
+        tra_reg_loss = 0.0
+        tra_rank_loss = 0.0
+        
+        for t in range(T):
+            # Forward pass: Compute predicted y by passing x to the model
+            cur_loss, cur_reg_loss, cur_rank_loss= model(j = t)
+
+            # Compute and print loss
+            if t % 100 == 0:
+                loss = cur_loss.item() / T
+                print('Train Epoch: {} ({:.0f}%) \t Loss: {:.6f} \t '.format(
+                    i, 100. * (t/T), loss))
+            
+            tra_loss += cur_loss
+            tra_reg_loss += cur_reg_loss
+            tra_rank_loss += cur_rank_loss
+            
+    #         print('Train Loss:',
+    #         tra_loss / (valid_index - parameter['seq'] - steps + 1),
+    #         tra_reg_loss / (valid_index - parameter['seq'] - steps + 1),
+    #         tra_rank_loss / (valid_index - parameter['seq'] - steps + 1))
+            
+            # Zero gradients, perform a backward pass, and update the weights.
+            optimizer.zero_grad()
+            cur_loss.backward()
+            optimizer.step()
+        print('Train Loss:',
+        tra_loss.detach().numpy() / (T),
+        tra_reg_loss.detach().numpy() / (T),
+        tra_rank_loss.detach().numpy() / (T) )
+
+
+    print('training complete')
