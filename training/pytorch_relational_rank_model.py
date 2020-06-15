@@ -381,7 +381,7 @@ if __name__ == '__main__':
         if not os.path.exists(path):
             os.makedirs(path)
         str_date = str(datetime.date.today())
-        save_file_path = os.path.join(path, 'model_' + epochs + 'epochs_' + str_date + '.pth')
+        save_file_path = os.path.join(path, 'model_' + str(epochs) + 'epochs_' + str_date + '.pth')
         torch.save(model.state_dict(), save_file_path)
 
     print('training complete in', str(time() - start), 'seconds')
