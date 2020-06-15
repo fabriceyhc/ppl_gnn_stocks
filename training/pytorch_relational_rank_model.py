@@ -13,15 +13,15 @@
 #     dtype=float
 # )
 # best_test_pred = np.zeros(
-#     [len(self.tickers), self.trade_dates - self.parameters['seq'] -
+#     [len(self.tickers), self.trade_dates - self.params['seq'] -
 #      self.test_index - self.steps + 1], dtype=float
 # )
 # best_test_gt = np.zeros(
-#     [len(self.tickers), self.trade_dates - self.parameters['seq'] -
+#     [len(self.tickers), self.trade_dates - self.params['seq'] -
 #      self.test_index - self.steps + 1], dtype=float
 # )
 # best_test_mask = np.zeros(
-#     [len(self.tickers), self.trade_dates - self.parameters['seq'] -
+#     [len(self.tickers), self.trade_dates - self.params['seq'] -
 #      self.test_index - self.steps + 1], dtype=float
 # )
 # best_valid_perf = {
@@ -36,6 +36,7 @@ import argparse
 import copy
 import numpy as np
 import random
+import datetime
 from time import time
 import os
 os.environ['KMP_WARNINGS'] = '0'
@@ -43,17 +44,8 @@ os.environ['KMP_WARNINGS'] = '0'
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import torch.optim as optim
-
-# check if CUDA is available
-device = torch.device("cpu")
-use_cuda = False
-if torch.cuda.is_available():
-    print('CUDA is available!')
-    device = torch.device("cuda")
-    use_cuda = True
-else:
-    print('CUDA is not available.')
 
 from load_data import load_EOD_data, load_relation_data
 from evaluator import evaluate
@@ -69,17 +61,14 @@ def weighted_mse_loss(inputs, target, weights):
 #     print('out are of size', out.shape, ' and is', out)
     return out.sum(0)
 
-relu = nn.LeakyReLU(0.2)
 seed = 123456789
 np.random.seed(seed)
-
-# tf.set_random_seed(seed)
 torch.manual_seed(seed)
 
 class TwoLayerNet(torch.nn.Module):
     def __init__(self, data_path, market_name, tickers_fname, relation_name,
-                 emb_fname, parameter, steps=1, epochs=50, batch_size=None, 
-                 flat=False, gpu=False, in_pro=False):
+                 emb_fname, params, device, steps, batch_size=None, 
+                 flat=False, in_pro=False):
         
         super(TwoLayerNet, self).__init__()
         seed = 123456789
@@ -109,16 +98,15 @@ class TwoLayerNet(torch.nn.Module):
             os.path.join(self.data_path, '..', 'relation', self.relation_name,
                          self.market_name + rname_tail[self.relation_name])
         )
-#         print('relation encoding shape:', self.rel_encoding.shape)
-#         print('relation mask shape:', self.rel_mask.shape)
+        # print('relation encoding shape:', self.rel_encoding.shape)
+        # print('relation mask shape:', self.rel_mask.shape)
 
         self.embedding = np.load(
             os.path.join(self.data_path, '..', 'pretrain', emb_fname))
-#         print('embedding shape:', self.embedding.shape)
+            # print('embedding shape:', self.embedding.shape)
 
-        self.parameter = copy.copy(parameter)
+        self.params = copy.copy(params)
         self.steps = steps
-        self.epochs = epochs
         self.flat = flat
         self.inner_prod = in_pro
         if batch_size is None:
@@ -131,29 +119,29 @@ class TwoLayerNet(torch.nn.Module):
         self.trade_dates = self.mask_data.shape[1]
         self.fea_dim = 5
 
-        self.gpu = gpu
+        self.device = device
         self.lrelu = nn.LeakyReLU(0.2)
         self.batch_offsets = np.arange(start=0, stop=self.valid_index, dtype=int)
         np.random.shuffle(self.batch_offsets)
         
         self.rel_weightlayer = nn.Linear(self.rel_encoding.shape[-1], 1)
-        self.head_weightlayer = nn.Linear(self.parameter['unit'], 1)
-        self.tail_weightlayer = nn.Linear(self.parameter['unit'], 1)
+        self.head_weightlayer = nn.Linear(self.params['unit'], 1)
+        self.tail_weightlayer = nn.Linear(self.params['unit'], 1)
         
         self.weight_maskedsoftmax = nn.Softmax(dim = 0)
-        self.outputs_concatedlayer = nn.Linear(self.parameter['unit'] * 2, self.parameter['unit'])
+        self.outputs_concatedlayer = nn.Linear(self.params['unit'] * 2, self.params['unit'])
         gain=nn.init.calculate_gain('leaky_relu', 0.2)
-#         nn.init.xavier_uniform_(self.outputs_concatedlayer, gain)
+        # nn.init.xavier_uniform_(self.outputs_concatedlayer, gain)
         
-        self.predictionlayer = nn.Linear(self.parameter['unit'] * 2, 1)
-#         nn.init.xavier_uniform_(self.predictionlayer, gain)
+        self.predictionlayer = nn.Linear(self.params['unit'] * 2, 1)
+        # nn.init.xavier_uniform_(self.predictionlayer, gain)
 
 
     def get_batch(self, offset=None):
         if offset is None:
             offset = random.randrange(0, self.valid_index)
         #gives the length of the sequence
-        seq_len = self.parameter['seq']
+        seq_len = self.params['seq']
 
         #mask_batch stores the mask_data from offset to offset + sequencee length + steps
         mask_batch = self.mask_data[:, offset: offset + seq_len + self.steps]
@@ -176,47 +164,39 @@ class TwoLayerNet(torch.nn.Module):
                 )
     
     def forward(self, j):
-        if self.gpu == True:
-            cuda = torch.device('cuda')
-        else:
-            device_name = 'cpu'
-        if j == 0: print('device name:', device_name)
 
         # the ground truths, mask, features and base_price are placeholders of sizes [batchsize x 1], i.e. vectors
         ground_truth = torch.empty(self.batch_size, 1).to(device)
         mask = torch.empty(self.batch_size, 1).to(device)
 
-        # feature is a matrix of size [batchsize x parameters's unit]
-        feature = torch.empty(self.batch_size, self.parameter['unit']).to(device)
+        # feature is a matrix of size [batchsize x params's unit]
+        feature = torch.empty(self.batch_size, self.params['unit']).to(device)
         base_price = torch.empty(self.batch_size,1).to(device)
 
         all_one = torch.ones([self.batch_size, 1], dtype=torch.float64).to(device)
 
         #Getting the data
-        
         emb_batch, mask_batch, price_batch, gt_batch = self.get_batch(self.batch_offsets[j])
         
-        # feature is a matrix of size [batchsize x parameters's unit]
+        # feature is a matrix of size [batchsize x params's unit]
         feature = torch.tensor(emb_batch).to(device)
         
         # the ground truths, mask, features and base_price are placeholders of sizes [batchsize x 1], i.e. vectors
         mask = torch.tensor(mask_batch).to(device)
         ground_truth = torch.tensor(gt_batch).to(device)
         base_price = torch.tensor(price_batch).to(device)
-
-        
+      
         relation = torch.FloatTensor(self.rel_encoding).to(device)
         rel_mask = torch.FloatTensor(self.rel_mask).to(device)
 
         rel_weight = self.rel_weightlayer(relation).clamp(min = 0)
-
         
         if self.inner_prod:
-#             print('inner product weight')
+            # print('inner product weight')
             inner_weight = torch.matmul(feature, torch.transpose(feature, 0,1).float())
             weight = torch.mul(inner_weight, rel_weight[:, :, -1])
         else:
-#             print('sum weight')
+            # print('sum weight')
             head_weight = self.head_weightlayer(feature).clamp(min = 0)
             tail_weight = self.tail_weightlayer(feature).clamp(min = 0)
             
@@ -242,7 +222,7 @@ class TwoLayerNet(torch.nn.Module):
         if self.flat:
             print('one more hidden layer')
             torch.cat(feature, outputs_proped, dim = 0)
-            # outputs_concatedlayer = nn.Linear(feature.shape[-1], self.parameter['unit'])
+            # outputs_concatedlayer = nn.Linear(feature.shape[-1], self.params['unit'])
             outputs_concated =  self.lrelu(self.outputs_concatedlayer(torch.cat((feature, outputs_proped), 1)))
             
         else:
@@ -269,7 +249,7 @@ class TwoLayerNet(torch.nn.Module):
 
         #rank_loss = ReLU( pre_pw_dif * gt_pw_dif * mask_pw ) and then calculates the mean of elements
         rank_loss = torch.mean(
-            relu(
+            F.relu(
                 torch.mul(
                     torch.mul(pre_pw_dif, gt_pw_dif),
                     mask_pw
@@ -277,9 +257,9 @@ class TwoLayerNet(torch.nn.Module):
             )
         )
         
-        # loss is then the parameters/rank_loss (scalar) + reg_loss, which was 
+        # loss is then the params/rank_loss (scalar) + reg_loss, which was 
         # the MSE of ground truth and prediction rr's
-        loss = reg_loss + self.parameter['alpha'] * rank_loss
+        loss = reg_loss + self.params['alpha'] * rank_loss
         
         return loss, reg_loss, rank_loss
         """
@@ -305,7 +285,7 @@ if __name__ == '__main__':
                         help='learning rate')
     parser.add_argument('-a', default=1,
                         help='alpha, the weight of ranking loss')
-    parser.add_argument('-g', '--gpu', type=int, default=0, help='use gpu')
+    parser.add_argument('-g', '--gpu', type=int, default=1, help='try gpu, fallback to cpu')
 
     parser.add_argument('-e', '--emb_file', type=str,
                         default='NASDAQ_rank_lstm_seq-16_unit-64_2.csv.npy',
@@ -314,20 +294,27 @@ if __name__ == '__main__':
                         default='sector_industry',
                         help='relation type: sector_industry or wikidata')
     parser.add_argument('-ip', '--inner_prod', type=int, default=0)
+    parser.add_argument('-ep', '--epochs', type=int, default=5)
+    parser.add_argument('-sv', '--save_model', default=True)
+    parser.add_argument('-sp', '--save_model_path', default='pretrained_model')
     args = parser.parse_args()
 
     if args.t is None:
         args.t = args.m + '_tickers_qualify_dr-0.98_min-5_smooth.csv'
     args.gpu = (args.gpu == 1)
 
+    # check if CUDA is available
+    device = torch.device("cpu")
+    if args.gpu == True:
+        if torch.cuda.is_available():
+            device = torch.device("cuda")
+    print('**training on', device, '**')
+
     args.inner_prod = (args.inner_prod == 1)
-    parameter = {'seq': int(args.l), 'unit': int(args.u), 'lr': float(args.r),
+    params = {'seq': int(args.l), 'unit': int(args.u), 'lr': float(args.r),
                   'alpha': float(args.a)}
     print('arguments:', args)
-    print('parameters:', parameter)
-
-    # parameter = {'seq': int(16), 'unit': int(64), 'lr': float(0.01),
-    #             'alpha': float(0.1)}
+    print('params:', params)
     
     # Construct our model by instantiating the class defined above
     model = TwoLayerNet(
@@ -336,27 +323,30 @@ if __name__ == '__main__':
         tickers_fname=args.t,
         relation_name=args.rel_name,
         emb_fname=args.emb_file,
-        parameter=parameter,
-        steps=1, epochs=50, batch_size=None, gpu=args.gpu,
+        params=params,
+        device=device,
+        steps=args.s, 
+        batch_size=None, 
         in_pro=args.inner_prod
     )
 
     model.to(device)
 
     # Construct our loss function and an Optimizer. The call to model.parameters()
-    # in the SGD constructor will contain the learnable parameters of the two
+    # in the SGD constructor will contain the learnable params of the two
     # nn.Linear modules which are members of the model.
 
     criterion = torch.nn.MSELoss(reduction='sum')
-    optimizer = torch.optim.Adam(model.parameters(), lr=parameter['lr'])
-    epochs = 4
-    steps = 1
+    optimizer = torch.optim.Adam(model.parameters(), lr=params['lr'])
+    epochs = args.epochs
+    steps = args.s
     valid_index = 756
 
-    T = valid_index - parameter['seq'] - steps + 1
+    T = valid_index - params['seq'] - steps + 1
 
+    start = time()
     for i in range(1, epochs + 1):
-        t1 = time()
+
         # random shuffling of the batch data
         tra_loss = 0.0
         tra_reg_loss = 0.0
@@ -364,31 +354,34 @@ if __name__ == '__main__':
         
         for t in range(T):
             # Forward pass: Compute predicted y by passing x to the model
-            cur_loss, cur_reg_loss, cur_rank_loss= model(j = t)
+            cur_loss, cur_reg_loss, cur_rank_loss = model(j = t)
 
             # Compute and print loss
             if t % 100 == 0:
                 loss = cur_loss.item() / T
-                print('Train Epoch: {} ({:.0f}%) \t Loss: {:.6f} \t '.format(
-                    i, 100. * (t/T), loss))
+                print('Train Epoch: {} [{}/{} ({:.0f}%)] \t Loss: {:.6f} \t Time: {:.2f}s'.format(
+                    i, t, T, 100. * (t/T), loss, (time() - start)))
             
             tra_loss += cur_loss
             tra_reg_loss += cur_reg_loss
             tra_rank_loss += cur_rank_loss
             
-    #         print('Train Loss:',
-    #         tra_loss / (valid_index - parameter['seq'] - steps + 1),
-    #         tra_reg_loss / (valid_index - parameter['seq'] - steps + 1),
-    #         tra_rank_loss / (valid_index - parameter['seq'] - steps + 1))
-            
             # Zero gradients, perform a backward pass, and update the weights.
             optimizer.zero_grad()
             cur_loss.backward()
             optimizer.step()
+
         print('Train Loss:',
-        tra_loss.detach().numpy() / (T),
-        tra_reg_loss.detach().numpy() / (T),
-        tra_rank_loss.detach().numpy() / (T) )
+            tra_loss.detach().cpu().numpy() / (T),
+            tra_reg_loss.detach().cpu().numpy() / (T),
+            tra_rank_loss.detach().cpu().numpy() / (T))
 
+    if args.save_model:
+        path = args.save_model_path
+        if not os.path.exists(path):
+            os.makedirs(path)
+        str_date = str(datetime.date.today())
+        save_file_path = os.path.join(path, 'model_' + epochs + 'epochs_' + str_date + '.pth')
+        torch.save(model.state_dict(), save_file_path)
 
-    print('training complete')
+    print('training complete in', str(time() - start), 'seconds')
