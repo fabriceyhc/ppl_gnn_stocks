@@ -61,3 +61,22 @@ def save_corr_timestep(data, save_path='data/relation/correlations', market_name
         os.makedirs(save_path)
     save_file_path = os.path.join(save_path, market_name + '_correlation_init_' + str(t) + '.npy')
     np.save(save_file_path, data.cpu().numpy())
+    
+def get_dataset(price_data,n,train_size = 200, test_size = 20):
+    
+    start_point = n*test_size
+    split_point = start_point + train_size
+    final_point = split_point + test_size
+    if final_point > len(price_data[0]):
+        return len(price_data[0]) - start_point
+    train = price_data[:,start_point:split_point]
+    test = price_data[:,split_point:final_point]
+    return train,test
+
+def profit(test,truth):
+    total = 0
+    for i in range(0,len(test[0])):
+        best_buy = np.argmax(test[:,i])
+        prophet = 100*(truth[best_buy,i]-truth[best_buy-1,i])/truth[best_buy-1,i]
+        total += prophet
+    return total
