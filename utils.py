@@ -75,8 +75,10 @@ def get_dataset(price_data,n,train_size = 200, test_size = 20):
 
 def profit(test,truth):
     total = 0
-    for i in range(0,len(test[0])):
-        best_buy = np.argmax(test[:,i])
-        prophet = 100*(truth[best_buy,i]-truth[best_buy-1,i])/truth[best_buy-1,i]
+    for i in range(0,len(test[0])-1):
+        percent = (test[:,1:] - truth[:,:-1])/truth[:,:-1]
+        true_percent = (truth[:,1:] - truth[:,:-1])/truth[:,:-1]
+        best_buy = np.argmax(percent[:,i])
+        prophet = 100*(true_percent[best_buy,i])
         total += prophet
     return total
