@@ -124,7 +124,7 @@ def build_SFM_data(data_path, market_name, tickers):
 
 import torch
 
-def load_corr_timestep(data_path='../data/relation/correlations', market_name='NASDAQ', t=0):
+def load_corr_timestep(data_path='../data/relation/correlations_trained', market_name='NASDAQ', t=0):
     '''
     Loads the correlational matrix for a given timestep t as a PyTorch tensor
 
@@ -133,10 +133,11 @@ def load_corr_timestep(data_path='../data/relation/correlations', market_name='N
     market_name -- string name of market, options: ['NASDAQ', 'NYSE']
     t           -- int representing the desired timestep
     '''
-    load_path = os.path.join(data_path, market_name, os.listdir(os.path.join(data_path, market_name))[t])
+    file_name = market_name + '_correlation_init_' + str(t) + '.npy'
+    load_path = os.path.join(data_path, market_name, file_name)
     return torch.from_numpy(np.load(load_path)).float()
 
-def save_corr_timestep(data, save_path='../data/relation/trained_correlations', market_name='NASDAQ', t=0):
+def save_corr_timestep(data, save_path='../data/relation/correlations_trained', market_name='NASDAQ', t=0):
     '''
     Saves the correlational matrix for a given timestep t as an .npy file
     **NOTE: Intended to store tensors after gradient adjustment.**
@@ -152,4 +153,4 @@ def save_corr_timestep(data, save_path='../data/relation/trained_correlations', 
     if not os.path.exists(save_path):
         os.makedirs(save_path)
     save_file_path = os.path.join(save_path, market_name + '_correlation_init_' + str(t) + '.npy')
-    np.save(save_file_path, data.cpu().numpy())
+    np.save(save_file_path, data.detach().cpu().numpy())
