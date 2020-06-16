@@ -37,10 +37,10 @@ import copy
 import numpy as np
 import random
 import datetime
+import glob
 from time import time
 import os
 os.environ['KMP_WARNINGS'] = '0'
-# import psutil
 
 import torch
 import torch.nn as nn
@@ -50,16 +50,28 @@ import torch.optim as optim
 from load_data import load_EOD_data, load_relation_data
 from evaluator import evaluate
 
-
 def weighted_mse_loss(inputs, target, weights):
-#     print('return_ratio are of size', inputs.shape, ' and is', inputs)
-#     print('ground_truth are of size', target.shape, ' and is', target)
-#     print('mask are of size', weights.shape, ' and is', weights)
+    # print('return_ratio are of size', inputs.shape, ' and is', inputs)
+    # print('ground_truth are of size', target.shape, ' and is', target)
+    # print('mask are of size', weights.shape, ' and is', weights)
     out = inputs - target
-#     print('out are of size', out.shape, ' and is', out)
+    # print('out are of size', out.shape, ' and is', out)
     out = out * out
-#     print('out are of size', out.shape, ' and is', out)
+    # print('out are of size', out.shape, ' and is', out)
     return out.sum(0)
+
+def get_pretrained_weights(model, device, directory="pretrained_model", get_any=False):
+    latest_model = None
+    prev_models = glob.glob(directory + '/*.pth')
+    if prev_models:
+        latest_model = max(prev_models, key=os.path.getctime)
+    if (latest_model is not None):  
+        print('loading model', latest_model)
+        model.load_state_dict(torch.load(latest_model, map_location=device))  
+        return model, True
+    else:
+        print('no model found. train a new one.')
+        return model, False
 
 seed = 123456789
 np.random.seed(seed)
@@ -286,7 +298,6 @@ if __name__ == '__main__':
     parser.add_argument('-a', default=1,
                         help='alpha, the weight of ranking loss')
     parser.add_argument('-g', '--gpu', type=int, default=1, help='try gpu, fallback to cpu')
-
     parser.add_argument('-e', '--emb_file', type=str,
                         default='NASDAQ_rank_lstm_seq-16_unit-64_2.csv.npy',
                         help='fname for pretrained sequential embedding')
@@ -297,6 +308,8 @@ if __name__ == '__main__':
     parser.add_argument('-ep', '--epochs', type=int, default=5)
     parser.add_argument('-sv', '--save_model', default=True)
     parser.add_argument('-sp', '--save_model_path', default='pretrained_model')
+    parser.add_argument('-up', '--use_pretrain', default=1, help='searches save_model_path \
+                        for pretrained weights and skips training.')
     args = parser.parse_args()
 
     if args.t is None:
@@ -332,56 +345,61 @@ if __name__ == '__main__':
 
     model.to(device)
 
-    # Construct our loss function and an Optimizer. The call to model.parameters()
-    # in the SGD constructor will contain the learnable params of the two
-    # nn.Linear modules which are members of the model.
+    if args.use_pretrain == True:
+        model, model_found = get_pretrained_weights(model, device, args.save_model_path)
+    
+    if not args.use_pretrain or not model_found: 
 
-    criterion = torch.nn.MSELoss(reduction='sum')
-    optimizer = torch.optim.Adam(model.parameters(), lr=params['lr'])
-    epochs = args.epochs
-    steps = args.s
-    valid_index = 756
+        # Construct our loss function and an Optimizer. The call to model.parameters()
+        # in the SGD constructor will contain the learnable params of the two
+        # nn.Linear modules which are members of the model.
 
-    T = valid_index - params['seq'] - steps + 1
+        criterion = torch.nn.MSELoss(reduction='sum')
+        optimizer = torch.optim.Adam(model.parameters(), lr=params['lr'])
+        epochs = args.epochs
+        steps = args.s
+        valid_index = 756
 
-    start = time()
-    for i in range(1, epochs + 1):
+        T = valid_index - params['seq'] - steps + 1
 
-        # random shuffling of the batch data
-        tra_loss = 0.0
-        tra_reg_loss = 0.0
-        tra_rank_loss = 0.0
-        
-        for t in range(T):
-            # Forward pass: Compute predicted y by passing x to the model
-            cur_loss, cur_reg_loss, cur_rank_loss = model(j = t)
+        start = time()
+        for i in range(1, epochs + 1):
 
-            # Compute and print loss
-            if t % 100 == 0:
-                loss = cur_loss.item() / T
-                print('Train Epoch: {} [{}/{} ({:.0f}%)] \t Loss: {:.6f} \t Time: {:.2f}s'.format(
-                    i, t, T, 100. * (t/T), loss, (time() - start)))
+            # random shuffling of the batch data
+            tra_loss = 0.0
+            tra_reg_loss = 0.0
+            tra_rank_loss = 0.0
             
-            tra_loss += cur_loss
-            tra_reg_loss += cur_reg_loss
-            tra_rank_loss += cur_rank_loss
-            
-            # Zero gradients, perform a backward pass, and update the weights.
-            optimizer.zero_grad()
-            cur_loss.backward()
-            optimizer.step()
+            for t in range(T):
+                # Forward pass: Compute predicted y by passing x to the model
+                cur_loss, cur_reg_loss, cur_rank_loss = model(j = t)
 
-        print('Train Loss:',
-            tra_loss.detach().cpu().numpy() / (T),
-            tra_reg_loss.detach().cpu().numpy() / (T),
-            tra_rank_loss.detach().cpu().numpy() / (T))
+                # Compute and print loss
+                if t % 100 == 0:
+                    loss = cur_loss.item() / T
+                    print('Train Epoch: {} [{}/{} ({:.0f}%)] \t Loss: {:.6f} \t Time: {:.2f}s'.format(
+                        i, t, T, 100. * (t/T), loss, (time() - start)))
+                
+                tra_loss += cur_loss
+                tra_reg_loss += cur_reg_loss
+                tra_rank_loss += cur_rank_loss
+                
+                # Zero gradients, perform a backward pass, and update the weights.
+                optimizer.zero_grad()
+                cur_loss.backward()
+                optimizer.step()
 
-    if args.save_model:
-        path = args.save_model_path
-        if not os.path.exists(path):
-            os.makedirs(path)
-        str_date = str(datetime.date.today())
-        save_file_path = os.path.join(path, 'model_' + str(epochs) + 'epochs_' + str_date + '.pth')
-        torch.save(model.state_dict(), save_file_path)
+            print('Train Loss:',
+                tra_loss.detach().cpu().numpy() / (T),
+                tra_reg_loss.detach().cpu().numpy() / (T),
+                tra_rank_loss.detach().cpu().numpy() / (T))
 
-    print('training complete in', str(time() - start), 'seconds')
+        if args.save_model:
+            path = args.save_model_path
+            if not os.path.exists(path):
+                os.makedirs(path)
+            str_date = str(datetime.date.today())
+            save_file_path = os.path.join(path, 'model_' + str(epochs) + 'epochs_' + str_date + '.pth')
+            torch.save(model.state_dict(), save_file_path)
+
+        print('training complete in', str(time() - start), 'seconds')
