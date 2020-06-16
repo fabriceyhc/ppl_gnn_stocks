@@ -13,7 +13,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 
-from load_data import load_EOD_data, load_relation_data
+from load_data import *
 from evaluator import evaluate
 
 def weighted_mse_loss(inputs, target, weights):
@@ -69,15 +69,22 @@ class TorchReRaLSTM(torch.nn.Module):
             load_EOD_data(data_path, market_name, self.tickers, steps)
 
         # relation data
-        rname_tail = {'sector_industry': '_industry_relation.npy',
-                      'wikidata': '_wiki_relation.npy'}
+        if self.relation_name == 'correlational':
+            self.rel_encoding = load_corr_timestep(market_name=self.market_name, t=0).unsqueeze_(-1)
+            rel_shape = self.rel_encoding.shape
+            self.rel_mask = torch.where(self.rel_encoding == 0, 
+                                        torch.ones(rel_shape) * -1e9, 
+                                        torch.zeros(rel_shape)).squeeze_()
+        else:
+            rname_tail = {'sector_industry': '_industry_relation.npy',
+                          'wikidata': '_wiki_relation.npy'}
 
-        self.rel_encoding, self.rel_mask = load_relation_data(
-            os.path.join(self.data_path, '..', 'relation', self.relation_name,
-                         self.market_name + rname_tail[self.relation_name])
-        )
-        # print('relation encoding shape:', self.rel_encoding.shape)
-        # print('relation mask shape:', self.rel_mask.shape)
+            self.rel_encoding, self.rel_mask = load_relation_data(
+                os.path.join(self.data_path, '..', 'relation', self.relation_name,
+                             self.market_name + rname_tail[self.relation_name])
+            )
+        print('relation encoding shape:', self.rel_encoding.shape)
+        print('relation mask shape:', self.rel_mask.shape)
 
         self.embedding = np.load(
             os.path.join(self.data_path, '..', 'pretrain', emb_fname))
@@ -156,7 +163,7 @@ class TorchReRaLSTM(torch.nn.Module):
 
         all_one = torch.ones([self.batch_size, 1], dtype=torch.float64).to(device)
 
-        #Getting the data
+        # getting the data
         emb_batch, mask_batch, price_batch, gt_batch = self.get_batch(self.batch_offsets[j])
         
         # feature is a matrix of size [batchsize x params's unit]
@@ -167,10 +174,18 @@ class TorchReRaLSTM(torch.nn.Module):
         ground_truth = torch.tensor(gt_batch).to(device)
         base_price = torch.tensor(price_batch).to(device)
       
+        if self.relation_name == 'correlational':
+            self.rel_encoding = load_corr_timestep(market_name=self.market_name, t=j).unsqueeze_(-1)
+            rel_shape = self.rel_encoding.shape
+            self.rel_mask = torch.where(self.rel_encoding == 0, 
+                                        torch.ones(rel_shape) * -1e9, 
+                                        torch.zeros(rel_shape)).squeeze_()
+            
         relation = torch.FloatTensor(self.rel_encoding).to(device)
         rel_mask = torch.FloatTensor(self.rel_mask).to(device)
 
         rel_weight = self.rel_weightlayer(relation).clamp(min = 0)
+        # print('rel_weight:', rel_weight.shape)
         
         if self.inner_prod:
             # print('inner product weight')
@@ -192,20 +207,21 @@ class TorchReRaLSTM(torch.nn.Module):
                     torch.matmul(all_one.float(), torch.transpose(tail_weight, 0,1).float())
                 ), rel_weight[:, :, -1]
             )
-        
+        # print('weight', weight.shape)
         
         #rel_mask and weight are added. then an activation function is applied
         weight_masked = self.weight_maskedsoftmax(torch.add(rel_mask, weight))
+        # print('weight_masked:', weight_masked.shape)
         
         #outputs_proped is weight_masked * feature
         outputs_proped = torch.matmul(weight_masked, feature)
+        # print('outputs_proped:', outputs_proped.shape)
         
         if self.flat:
-            print('one more hidden layer')
+            # print('one more hidden layer')
             torch.cat(feature, outputs_proped, dim = 0)
             # outputs_concatedlayer = nn.Linear(feature.shape[-1], self.params['unit'])
             outputs_concated =  self.lrelu(self.outputs_concatedlayer(torch.cat((feature, outputs_proped), 1)))
-            
         else:
             outputs_concated = torch.cat((feature, outputs_proped), 1)
         
@@ -272,7 +288,7 @@ if __name__ == '__main__':
                         help='fname for pretrained sequential embedding')
     parser.add_argument('-rn', '--rel_name', type=str,
                         default='sector_industry',
-                        help='relation type: sector_industry or wikidata')
+                        help='relation type: sector_industry, wikidata, or correlational')
     parser.add_argument('-ip', '--inner_prod', type=int, default=0)
     parser.add_argument('-ep', '--epochs', type=int, default=5)
     parser.add_argument('-sv', '--save_model', default=True)
@@ -314,6 +330,7 @@ if __name__ == '__main__':
 
     model.to(device)
 
+    model_found = False
     if args.use_pretrain == True:
         model, model_found = get_pretrained_weights(model, device, args.save_model_path)
     
@@ -375,7 +392,10 @@ if __name__ == '__main__':
             if not os.path.exists(path):
                 os.makedirs(path)
             str_date = str(datetime.date.today())
-            save_file_path = os.path.join(path, 'model_' + str(epochs) + 'epochs_' + str_date + '.pth')
+            save_file_path = os.path.join(path, 'model_' + str(epochs) + 'epochs_' 
+                                               + model.market_name + '_'
+                                               + model.relation_name + '_'
+                                               + str_date + '.pth')
             torch.save(model.state_dict(), save_file_path)
 
         print('training complete in', str(time() - start), 'seconds')
