@@ -421,10 +421,13 @@ if __name__ == '__main__':
                                        market_name=model.market_name, 
                                        t=t)
 
-            print('Train Loss:',
-                tra_loss.detach().cpu().numpy() / (T),
-                tra_reg_loss.detach().cpu().numpy() / (T),
-                tra_rank_loss.detach().cpu().numpy() / (T))
+            tra_loss = tra_loss.detach().cpu().numpy() / T
+            tra_reg_loss = tra_reg_loss.detach().cpu().numpy() / T
+            tra_rank_loss = tra_rank_loss.detach().cpu().numpy() / T
+
+            print('Train Loss:', tra_loss.item(), 
+                                 tra_reg_loss.item(), 
+                                 tra_rank_loss.item())
 
         if args.save_model:
             path = args.save_model_path
@@ -433,7 +436,8 @@ if __name__ == '__main__':
             str_date = str(datetime.date.today())
             save_file_path = os.path.join(path, 'model_' + str(epochs) + 'epochs_' 
                                                + model.market_name + '_'
-                                               + model.relation_name + '_'
+                                               + model.relation_name + '_loss'
+                                               + str(round(tra_loss.item(),2)) + '_'
                                                + str_date + '.pth')
             torch.save(model.state_dict(), save_file_path)
 
