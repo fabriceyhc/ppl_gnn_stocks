@@ -1,37 +1,3 @@
-
-
-    # best_valid_pred = np.zeros(
-#     [len(self.tickers), self.test_index - self.valid_index],
-#     dtype=float
-# )
-# best_valid_gt = np.zeros(
-#     [len(self.tickers), self.test_index - self.valid_index],
-#     dtype=float
-# )
-# best_valid_mask = np.zeros(
-#     [len(self.tickers), self.test_index - self.valid_index],
-#     dtype=float
-# )
-# best_test_pred = np.zeros(
-#     [len(self.tickers), self.trade_dates - self.parameters['seq'] -
-#      self.test_index - self.steps + 1], dtype=float
-# )
-# best_test_gt = np.zeros(
-#     [len(self.tickers), self.trade_dates - self.parameters['seq'] -
-#      self.test_index - self.steps + 1], dtype=float
-# )
-# best_test_mask = np.zeros(
-#     [len(self.tickers), self.trade_dates - self.parameters['seq'] -
-#      self.test_index - self.steps + 1], dtype=float
-# )
-# best_valid_perf = {
-#     'mse': np.inf, 'mrrt': 0.0, 'btl': 0.0
-# }
-# best_test_perf = {
-#     'mse': np.inf, 'mrrt': 0.0, 'btl': 0.0
-# }
-# best_valid_loss = np.inf
-
 import argparse
 import copy
 import numpy as np
@@ -76,12 +42,12 @@ np.random.seed(seed)
 # tf.set_random_seed(seed)
 torch.manual_seed(seed)
 
-class TwoLayerNet(torch.nn.Module):
+class TorchReRaLSTM(torch.nn.Module):
     def __init__(self, data_path, market_name, tickers_fname, relation_name,
                  emb_fname, parameter, steps=1, epochs=50, batch_size=None, 
                  flat=False, gpu=False, in_pro=False):
         
-        super(TwoLayerNet, self).__init__()
+        super(TorchReRaLSTM, self).__init__()
         seed = 123456789
         random.seed(seed)
         np.random.seed(seed)
@@ -132,10 +98,12 @@ class TwoLayerNet(torch.nn.Module):
         self.fea_dim = 5
 
         self.gpu = gpu
-        self.lrelu = nn.LeakyReLU(0.2)
+
+        # random shuffling of the batch data
         self.batch_offsets = np.arange(start=0, stop=self.valid_index, dtype=int)
         np.random.shuffle(self.batch_offsets)
         
+        self.lrelu = nn.LeakyReLU(0.2)
         self.rel_weightlayer = nn.Linear(self.rel_encoding.shape[-1], 1)
         self.head_weightlayer = nn.Linear(self.parameter['unit'], 1)
         self.tail_weightlayer = nn.Linear(self.parameter['unit'], 1)
@@ -325,12 +293,9 @@ if __name__ == '__main__':
                   'alpha': float(args.a)}
     print('arguments:', args)
     print('parameters:', parameter)
-
-    # parameter = {'seq': int(16), 'unit': int(64), 'lr': float(0.01),
-    #             'alpha': float(0.1)}
     
     # Construct our model by instantiating the class defined above
-    model = TwoLayerNet(
+    model = TorchReRaLSTM(
         data_path=args.p,
         market_name=args.m,
         tickers_fname=args.t,
@@ -352,43 +317,147 @@ if __name__ == '__main__':
     epochs = 4
     steps = 1
     valid_index = 756
+    test_index = 1008
+    trade_dates = 1245
+    fea_dim = 5
+    tickers_len = 1026
+    
+    train_range = valid_index - parameter['seq'] - steps + 1
+    valid_range = test_index - parameter['seq'] - steps + 1
+    test_range = trade_dates - parameter['seq'] - steps + 1
 
-    T = valid_index - parameter['seq'] - steps + 1
 
     for i in range(1, epochs + 1):
         t1 = time()
-        # random shuffling of the batch data
+        
+        best_valid_pred = best_valid_gt = best_valid_mask = np.zeros(
+        [tickers_len, test_index - valid_index] ,
+        dtype=float
+        )
+
         tra_loss = 0.0
         tra_reg_loss = 0.0
         tra_rank_loss = 0.0
         
-        for t in range(T):
+        for t in range(train_range):
             # Forward pass: Compute predicted y by passing x to the model
             cur_loss, cur_reg_loss, cur_rank_loss= model(j = t)
 
             # Compute and print loss
             if t % 100 == 0:
-                loss = cur_loss.item() / T
-                print('Train Epoch: {} ({:.0f}%) \t Loss: {:.6f} \t '.format(
-                    i, 100. * (t/T), loss))
+                loss = cur_loss.item() / train_range
+                print('Train Epoch: {} ({:.0f}%) \t Training Loss: {:.6f} \t '.format(
+                    i, 100. * (t/train_range), loss))
             
             tra_loss += cur_loss
             tra_reg_loss += cur_reg_loss
             tra_rank_loss += cur_rank_loss
             
-    #         print('Train Loss:',
-    #         tra_loss / (valid_index - parameter['seq'] - steps + 1),
-    #         tra_reg_loss / (valid_index - parameter['seq'] - steps + 1),
-    #         tra_rank_loss / (valid_index - parameter['seq'] - steps + 1))
-            
             # Zero gradients, perform a backward pass, and update the weights.
             optimizer.zero_grad()
             cur_loss.backward()
             optimizer.step()
+        
         print('Train Loss:',
-        tra_loss.detach().numpy() / (T),
-        tra_reg_loss.detach().numpy() / (T),
-        tra_rank_loss.detach().numpy() / (T) )
+        tra_loss.detach().numpy() / (train_range),
+        tra_reg_loss.detach().numpy() / (train_range),
+        tra_rank_loss.detach().numpy() / (train_range) )
+
+
+        val_loss = 0.0
+        val_reg_loss = 0.0
+        val_rank_loss = 0.0
+        
+        for cur_offset in range(train_range, valid_range):
+            # Forward pass: Compute predicted y by passing x to the model
+            cur_loss, cur_reg_loss, cur_rank_loss= model(j = cur_offset)
+
+            val_loss += cur_loss
+            val_reg_loss += cur_reg_loss
+            val_rank_loss += cur_rank_loss
+
+            if t % 100 == 0:
+                loss = cur_loss.item() / (valid_range - train_range)
+                print('Train Epoch: {} ({:.0f}%) \t Validation Loss: {:.6f} \t '.format(
+                    i, 100. * (t/valid_range - train_range), loss))
+
+            # cur_valid_pred[:, cur_offset - (train_range] = \
+            #     copy.copy(cur_rr[:, 0])
+            # cur_valid_gt[:, cur_offset - (train_range)] = \
+            #     copy.copy(gt_batch[:, 0])
+            # cur_valid_mask[:, cur_offset - (train_range)] = \
+            #     copy.copy(mask_batch[:, 0])
+
+        # cur_valid_pred = cur_valid_gt = cur_valid_mask = np.zeros(
+        #     [tickers_len, test_index - valid_index],
+        #     dtype=float
+        # )
+
+        print('Valid MSE:',
+        val_loss.detach().numpy() / (valid_range - train_range),
+        val_reg_loss.detach().numpy() / (valid_range - train_range),
+        val_rank_loss.detach().numpy() / (valid_range - train_range))
+
+        test_loss = 0.0
+        test_reg_loss = 0.0
+        test_rank_loss = 0.0
+
+        for cur_offset in range(valid_range, test_range):
+            cur_loss, cur_reg_loss, cur_rank_loss= model(j = cur_offset)
+
+            if t % 100 == 0:
+                loss = cur_loss.item() / (test_range - valid_range)
+                print('Train Epoch: {} ({:.0f}%) \t Testing Loss: {:.6f} \t '.format(
+                    i, 100. * (t/test_range - valid_range), loss))
+
+            test_loss += cur_loss
+            test_reg_loss += cur_reg_loss
+            test_rank_loss += cur_rank_loss
+        
+        print('Test MSE:',
+        test_loss.detach().numpy() / (test_range - valid_range),
+        test_reg_loss.detach().numpy() / (test_range - valid_range),
+        test_rank_loss.detach().numpy() / (test_range - valid_range))
+
+
+
+
+
+
+
+
 
 
     print('training complete')
+
+# best_valid_pred = best_valid_gt = best_valid_mask = np.zeros(
+#     [len(self.tickers), self.test_index - self.valid_index],
+#     dtype=float
+# )
+# best_valid_gt = np.zeros(
+#     [len(self.tickers), self.test_index - self.valid_index],
+#     dtype=float
+# )
+# best_valid_mask = np.zeros(
+#     [len(self.tickers), self.test_index - self.valid_index],
+#     dtype=float
+# )
+# best_test_pred = np.zeros(
+#     [len(self.tickers), self.trade_dates - self.parameters['seq'] -
+#      self.test_index - self.steps + 1], dtype=float
+# )
+# best_test_gt = np.zeros(
+#     [len(self.tickers), self.trade_dates - self.parameters['seq'] -
+#      self.test_index - self.steps + 1], dtype=float
+# )
+# best_test_mask = np.zeros(
+#     [len(self.tickers), self.trade_dates - self.parameters['seq'] -
+#      self.test_index - self.steps + 1], dtype=float
+# )
+# best_valid_perf = {
+#     'mse': np.inf, 'mrrt': 0.0, 'btl': 0.0
+# }
+# best_test_perf = {
+#     'mse': np.inf, 'mrrt': 0.0, 'btl': 0.0
+# }
+# best_valid_loss = np.inf

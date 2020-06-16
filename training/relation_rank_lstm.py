@@ -21,7 +21,8 @@ except ImportError:
 
 from load_data import load_EOD_data, load_relation_data
 from evaluator import evaluate
-
+import tensorflow.compat.v1 as tf
+tf.disable_v2_behavior() 
 seed = 123456789
 np.random.seed(seed)
 tf.set_random_seed(seed)
