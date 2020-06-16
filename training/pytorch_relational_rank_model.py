@@ -104,7 +104,8 @@ class TwoLayerNet(torch.nn.Module):
 
         # relation data
         if self.relation_name == 'correlational':
-            self.rel_encoding = load_corr_timestep(market_name=self.market_name, t=0).unsqueeze_(-1)
+            self.rel_encoding = load_corr_timestep(market_name=self.market_name, 
+                                                   t=0).squeeze_().unsqueeze_(-1).requires_grad_(True)
             rel_shape = self.rel_encoding.shape
             self.rel_mask = torch.where(self.rel_encoding == 0, 
                                         torch.ones(rel_shape) * -1e9, 
@@ -117,6 +118,8 @@ class TwoLayerNet(torch.nn.Module):
                 os.path.join(self.data_path, '..', 'relation', self.relation_name,
                              self.market_name + rname_tail[self.relation_name])
             )
+            self.rel_encoding = torch.from_numpy(self.rel_encoding).float()
+            self.rel_mask = torch.from_numpy(self.rel_mask).float()
         print('relation encoding shape:', self.rel_encoding.shape)
         print('relation mask shape:', self.rel_mask.shape)
 
@@ -155,6 +158,8 @@ class TwoLayerNet(torch.nn.Module):
         self.predictionlayer = nn.Linear(self.params['unit'] * 2, 1)
         # nn.init.xavier_uniform_(self.predictionlayer, gain)
 
+        self.prev_relation = self.rel_encoding
+
 
     def get_batch(self, offset=None):
         if offset is None:
@@ -182,7 +187,7 @@ class TwoLayerNet(torch.nn.Module):
                     self.gt_data[:, offset + seq_len + self.steps - 1], axis=1
                 )
     
-    def forward(self, j):
+    def forward(self, epoch, j):
 
         # the ground truths, mask, features and base_price are placeholders of sizes [batchsize x 1], i.e. vectors
         ground_truth = torch.empty(self.batch_size, 1).to(device)
@@ -206,14 +211,15 @@ class TwoLayerNet(torch.nn.Module):
         base_price = torch.tensor(price_batch).to(device)
       
         if self.relation_name == 'correlational':
-            self.rel_encoding = load_corr_timestep(market_name=self.market_name, t=j).unsqueeze_(-1)
+            self.rel_encoding = load_corr_timestep(market_name=self.market_name, 
+                                                   t=j).squeeze_().unsqueeze_(-1).requires_grad_(True)
             rel_shape = self.rel_encoding.shape
             self.rel_mask = torch.where(self.rel_encoding == 0, 
                                         torch.ones(rel_shape) * -1e9, 
                                         torch.zeros(rel_shape)).squeeze_()
-            
-        relation = torch.FloatTensor(self.rel_encoding).to(device)
-        rel_mask = torch.FloatTensor(self.rel_mask).to(device)
+
+        relation = self.rel_encoding.to(device)
+        rel_mask = self.rel_mask.float().to(device)
 
         rel_weight = self.rel_weightlayer(relation).clamp(min = 0)
         # print('rel_weight:', rel_weight.shape)
@@ -380,7 +386,7 @@ if __name__ == '__main__':
         T = valid_index - params['seq'] - steps + 1
 
         start = time()
-        for i in range(1, epochs + 1):
+        for epoch in range(1, epochs + 1):
 
             # random shuffling of the batch data
             tra_loss = 0.0
@@ -389,13 +395,13 @@ if __name__ == '__main__':
             
             for t in range(T):
                 # Forward pass: Compute predicted y by passing x to the model
-                cur_loss, cur_reg_loss, cur_rank_loss = model(j = t)
+                cur_loss, cur_reg_loss, cur_rank_loss = model(epoch=epoch, j = t)
 
                 # Compute and print loss
                 if t % 100 == 0:
                     loss = cur_loss.item() / T
                     print('Train Epoch: {} [{}/{} ({:.0f}%)] \t Loss: {:.6f} \t Time: {:.2f}s'.format(
-                        i, t, T, 100. * (t/T), loss, (time() - start)))
+                        epoch, t, T, 100. * (t/T), loss, (time() - start)))
                 
                 tra_loss += cur_loss
                 tra_reg_loss += cur_reg_loss
@@ -405,6 +411,15 @@ if __name__ == '__main__':
                 optimizer.zero_grad()
                 cur_loss.backward()
                 optimizer.step()
+
+                # save the trained correlational weights for timestep t
+                if args.rel_name == 'correlational':
+                    corr_t = model.rel_encoding.clone().detach()
+                    grad_t = model.rel_encoding.grad
+                    corr_t -= (grad_t * params['lr'])
+                    save_corr_timestep(data=corr_t, 
+                                       market_name=model.market_name, 
+                                       t=t)
 
             print('Train Loss:',
                 tra_loss.detach().cpu().numpy() / (T),
