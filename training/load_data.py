@@ -2,12 +2,24 @@ import copy
 import numpy as np
 import os
 
-
 def load_EOD_data(data_path, market_name, tickers, steps=1):
     eod_data = []
     masks = []
     ground_truth = []
     base_price = []
+
+    loaded_data_path = os.path.join(data_path, market_name)
+
+    # attempt to load old versions to save time...remove later
+    try:
+        eod_data = np.load(loaded_data_path + '_eod_data.npy')
+        masks = np.load(loaded_data_path + '_mask_data.npy')
+        ground_truth = np.load(loaded_data_path + '_gt_data.npy')
+        base_price = np.load(loaded_data_path + '_price_data.npy')
+        return eod_data, masks, ground_truth, base_price
+    except:
+        pass
+
     for index, ticker in enumerate(tickers):
         single_EOD = np.genfromtxt(
             os.path.join(data_path, market_name + '_' + ticker + '_1.csv'),
@@ -39,12 +51,19 @@ def load_EOD_data(data_path, market_name, tickers, steps=1):
                     single_EOD[row][col] = 1.1
         eod_data[index, :, :] = single_EOD[:, 1:]
         base_price[index, :] = single_EOD[:, -1]
+
+    # save so we don't have to do all this work every time...remove later
+    np.save(loaded_data_path + '_eod_data.npy', eod_data)
+    np.save(loaded_data_path + '_mask_data.npy', masks)
+    np.save(loaded_data_path + '_gt_data.npy', ground_truth)
+    np.save(loaded_data_path + '_price_data.npy', base_price)  
+
     return eod_data, masks, ground_truth, base_price
 
 
 def load_graph_relation_data(relation_file, lap=False):
     relation_encoding = np.load(relation_file)
-    print('relation encoding shape:', relation_encoding.shape)
+    # print('relation encoding shape:', relation_encoding.shape)
     rel_shape = [relation_encoding.shape[0], relation_encoding.shape[1]]
     mask_flags = np.equal(np.zeros(rel_shape, dtype=int),
                           np.sum(relation_encoding, axis=2))
@@ -102,3 +121,35 @@ def build_SFM_data(data_path, market_name, tickers):
                 eod_data[index][row] = single_EOD[row][-1]
         # print('test point')
     np.save(market_name + '_sfm_data', eod_data)
+
+import torch
+
+def load_corr_timestep(data_path='../data/relation/correlations', market_name='NASDAQ', t=0):
+    '''
+    Loads the correlational matrix for a given timestep t as a PyTorch tensor
+
+    Keyword arguments:
+    data_path   -- string path to the folder containing the numpy correlation matrices
+    market_name -- string name of market, options: ['NASDAQ', 'NYSE']
+    t           -- int representing the desired timestep
+    '''
+    load_path = os.path.join(data_path, market_name, os.listdir(os.path.join(data_path, market_name))[t])
+    return torch.from_numpy(np.load(load_path)).float()
+
+def save_corr_timestep(data, save_path='../data/relation/trained_correlations', market_name='NASDAQ', t=0):
+    '''
+    Saves the correlational matrix for a given timestep t as an .npy file
+    **NOTE: Intended to store tensors after gradient adjustment.**
+
+    Keyword arguments:
+    data        -- PyTorch tensor to save
+    save_path   -- string path to the destination folder of the PyTorch correlation matrices
+    market_name -- string name of market, options: ['NASDAQ', 'NYSE']
+    t           -- int representing the desired timestep
+    '''
+    # setup save directory
+    save_path = os.path.join(save_path, market_name)
+    if not os.path.exists(save_path):
+        os.makedirs(save_path)
+    save_file_path = os.path.join(save_path, market_name + '_correlation_init_' + str(t) + '.npy')
+    np.save(save_file_path, data.cpu().numpy())
