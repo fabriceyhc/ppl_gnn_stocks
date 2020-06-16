@@ -107,7 +107,7 @@ class TorchReRaLSTM(torch.nn.Module):
         self.trade_dates = self.mask_data.shape[1]
         self.fea_dim = 5
 
-        self.gpu = gpu
+        # self.gpu = gpu
 
         # random shuffling of the batch data
         self.device = device
@@ -128,6 +128,8 @@ class TorchReRaLSTM(torch.nn.Module):
         # nn.init.xavier_uniform_(self.predictionlayer, gain)
 
         self.prev_relation = self.rel_encoding
+
+        self.money_after_days = 0
 
 
     def get_batch(self, offset=None):
@@ -156,7 +158,7 @@ class TorchReRaLSTM(torch.nn.Module):
                     self.gt_data[:, offset + seq_len + self.steps - 1], axis=1
                 )
     
-    def forward(self, epoch, j):
+    def forward(self, j, epoch = 1):
 
         # the ground truths, mask, features and base_price are placeholders of sizes [batchsize x 1], i.e. vectors
         ground_truth = torch.empty(self.batch_size, 1).to(device)
@@ -169,7 +171,10 @@ class TorchReRaLSTM(torch.nn.Module):
         all_one = torch.ones([self.batch_size, 1], dtype=torch.float64).to(device)
 
         # getting the data
-        emb_batch, mask_batch, price_batch, gt_batch = self.get_batch(self.batch_offsets[j])
+        if j < 756:
+            emb_batch, mask_batch, price_batch, gt_batch = self.get_batch(self.batch_offsets[j])
+        else:
+            emb_batch, mask_batch, price_batch, gt_batch = self.get_batch(j)
         
         # feature is a matrix of size [batchsize x params's unit]
         feature = torch.tensor(emb_batch).to(device)
@@ -301,6 +306,7 @@ if __name__ == '__main__':
     parser.add_argument('-sp', '--save_model_path', default='pretrained_model')
     parser.add_argument('-up', '--use_pretrain', default=1, help='searches save_model_path \
                         for pretrained weights and skips training.')
+    parser.add_argument('-rw', '--rolling_window', default = None, help='rolling window size')
     args = parser.parse_args()
 
     if args.t is None:
@@ -337,88 +343,87 @@ if __name__ == '__main__':
     model.to(device)
 
     model_found = False
-    if args.use_pretrain == True:
-        model, model_found = get_pretrained_weights(model, device, args.save_model_path)
+    # if args.use_pretrain == True:
+    #     model, model_found = get_pretrained_weights(model, device, args.save_model_path)
     
     if not args.use_pretrain or not model_found: 
     
-    criterion = torch.nn.MSELoss(reduction='sum')
-    optimizer = torch.optim.Adam(model.parameters(), lr=params['lr'])
-    epochs = args.epochs
-    steps = args.s
-    valid_index = 756
-    test_index = 1008
-    trade_dates = 1245
-    fea_dim = 5
-    tickers_len = 1026
-    
-    train_range = valid_index - params['seq'] - steps + 1
-    valid_range = test_index - params['seq'] - steps + 1
-    test_range = trade_dates - params['seq'] - steps + 1
+        criterion = torch.nn.MSELoss(reduction='sum')
+        optimizer = torch.optim.Adam(model.parameters(), lr=params['lr'])
+        epochs = args.epochs
+        steps = args.s
+        valid_index = 756
+        test_index = 1008
+        trade_dates = 1245
+        fea_dim = 5
+        tickers_len = 1026
 
+        train_range = valid_index - params['seq'] - steps + 1
+        valid_range = test_index - params['seq'] - steps + 1
+        test_range = trade_dates - params['seq'] - steps + 1
 
-    for i in range(1, epochs + 1):
-        
-        best_valid_pred = best_valid_gt = best_valid_mask = np.zeros(
-        [tickers_len, test_index - valid_index] ,
-        dtype=float
-        )
-        start = time()
-        for epoch in range(1, epochs + 1):
-
-        tra_loss = 0.0
-        tra_reg_loss = 0.0
-        tra_rank_loss = 0.0
-        
-        for t in range(train_range):
-            # Forward pass: Compute predicted y by passing x to the model
-            cur_loss, cur_reg_loss, cur_rank_loss= model(j = t)
-
-            # Compute and print loss
-            if t % 100 == 0:
-                loss = cur_loss.item() / train_range
-                print('Train Epoch: {} ({:.0f}%) \t Training Loss: {:.6f} \t '.format(
-                    i, 100. * (t/train_range), loss))
+        for roll in range(1, 1 + 1):
+            i = roll
             
-            tra_loss += cur_loss
-            tra_reg_loss += cur_reg_loss
-            tra_rank_loss += cur_rank_loss
+            best_valid_pred = best_valid_gt = best_valid_mask = np.zeros(
+            [tickers_len, test_index - valid_index] ,
+            dtype=float
+            )
             
-            # Zero gradients, perform a backward pass, and update the weights.
-            optimizer.zero_grad()
-            cur_loss.backward()
-            optimizer.step()
+            tra_loss = 0.0
+            tra_reg_loss = 0.0
+            tra_rank_loss = 0.0
 
-            # save the trained correlational weights for timestep t
-            if args.rel_name == 'correlational':
-                corr_t = model.rel_encoding.clone().detach()
-                grad_t = model.rel_encoding.grad
-                corr_t -= (grad_t * params['lr'])
-                save_corr_timestep(data=corr_t, 
-                                    market_name=model.market_name, 
-                                    t=t)
+            start = time()
+            for t in range(train_range):
+                # Forward pass: Compute predicted y by passing x to the model
+                cur_loss, cur_reg_loss, cur_rank_loss= model(j = t)
 
-        tra_loss = tra_loss.detach().cpu().numpy() / train_range
-        tra_reg_loss = tra_reg_loss.detach().cpu().numpy() / train_range
-        tra_rank_loss = tra_rank_loss.detach().cpu().numpy() / train_range
+                # Compute and print loss
+                if t % 100 == 0:
+                    loss = cur_loss.item() / train_range
+                    print('Train Epoch: {} ({:.0f}%) \t Training Loss: {:.6f} \t '.format(
+                        i, 100. * (t/train_range), loss))
+                
+                tra_loss += cur_loss
+                tra_reg_loss += cur_reg_loss
+                tra_rank_loss += cur_rank_loss
+                
+                # Zero gradients, perform a backward pass, and update the weights.
+                optimizer.zero_grad()
+                cur_loss.backward()
+                optimizer.step()
 
-        print('Train Loss:', tra_loss.item(), 
-                                tra_reg_loss.item(), 
-                                tra_rank_loss.item())
+                # save the trained correlational weights for timestep t
+                if args.rel_name == 'correlational':
+                    corr_t = model.rel_encoding.clone().detach()
+                    grad_t = model.rel_encoding.grad
+                    corr_t -= (grad_t * params['lr'])
+                    save_corr_timestep(data=corr_t, 
+                                        market_name=model.market_name, 
+                                        t=t)
 
-        if args.save_model:
-            path = args.save_model_path
-            if not os.path.exists(path):
-                os.makedirs(path)
-            str_date = str(datetime.date.today())
-            save_file_path = os.path.join(path, 'model_' + str(epochs) + 'epochs_' 
-                                               + model.market_name + '_'
-                                               + model.relation_name + '_loss'
-                                               + str(round(tra_loss.item(),2)) + '_'
-                                               + str_date + '.pth')
-            torch.save(model.state_dict(), save_file_path)
+            tra_loss = tra_loss.detach().cpu().numpy() / train_range
+            tra_reg_loss = tra_reg_loss.detach().cpu().numpy() / train_range
+            tra_rank_loss = tra_rank_loss.detach().cpu().numpy() / train_range
 
-        print('training complete in', str(time() - start), 'seconds')
+            print('Train Loss:', tra_loss.item(), 
+                                    tra_reg_loss.item(), 
+                                    tra_rank_loss.item())
+
+            if args.save_model:
+                path = args.save_model_path
+                if not os.path.exists(path):
+                    os.makedirs(path)
+                str_date = str(datetime.date.today())
+                save_file_path = os.path.join(path, 'model_' + str(epochs) + 'epochs_' 
+                                                + model.market_name + '_'
+                                                + model.relation_name + '_loss'
+                                                + str(round(tra_loss.item(),2)) + '_'
+                                                + str_date + '.pth')
+                torch.save(model.state_dict(), save_file_path)
+
+            print('training complete in', str(time() - start), 'seconds')
 
 
         val_loss = 0.0
