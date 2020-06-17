@@ -580,29 +580,60 @@ if __name__ == '__main__':
 
         return_ratio, ground_truth, _ = model.predict(start_idx=test_index, end_idx=trade_dates)
 
+        return_ratio = return_ratio.T
+        ground_truth = ground_truth.T
+
+        # calculate window MSE
+        MSE = F.mse_loss(return_ratio, ground_truth)
+        print('window_MSE:', MSE.item())
+
+        # calculate window returns
+        daily_investment = 100
+
+        # our returns for dataset
+        best_pred_gain, best_pred_companies = torch.max(return_ratio, axis=1)
+        tsteps = torch.arange(0, len(best_pred_companies)).long()
+        earn_gain = ground_truth[(tsteps, best_pred_companies)]
+
+        # best possible for dataset
+        best_gt_gain = torch.max(ground_truth, axis=1)[0]
+
+        # average for dataset
+        mean_gt_gain = torch.mean(ground_truth, axis=1)[0]
+
+        pred_return = torch.sum(torch.mul(daily_investment, best_pred_gain))
+        earn_return = torch.sum(torch.mul(daily_investment, earn_gain))
+        best_return = torch.sum(torch.mul(daily_investment, best_gt_gain))
+        mean_return = torch.sum(torch.mul(daily_investment, mean_gt_gain))
+
+        print('window_pred_return:', pred_return.item())
+        print('window_earn_return:', earn_return.item())
+        print('window_best_return:', best_return.item())
+        print('window_mean_return:', mean_return.item())
+
         return_ratios.append(return_ratio)
         ground_truths.append(ground_truth)
 
         # move the starting index up
         start_idx = train_range
 
-    return_ratios = torch.cat(return_ratios, dim=1).T
-    ground_truths = torch.cat(ground_truths, dim=1).T
+    return_ratios = torch.cat(return_ratios, dim=0)
+    ground_truths = torch.cat(ground_truths, dim=0)
 
-    print(return_ratios.shape, ground_truths.shape)
+    # print(return_ratios.shape, ground_truths.shape)
     # print(return_ratios, ground_truths)
 
-    # calculate MSE
+    # calculate total MSE
     MSE = F.mse_loss(return_ratios, ground_truths)
-    print('MSE:', MSE.item())
+    print('total_MSE:', MSE.item())
 
-    # calculate returns
+    # calculate total returns
     daily_investment = 100
 
     # our returns for dataset
-    best_pred_gain, best_pred_idxs = torch.max(return_ratios, axis=1)
-    tsteps = torch.arange(0, len(best_pred_idxs)).long()
-    earn_gain = ground_truths[(tsteps, best_pred_idxs)]
+    best_pred_gain, best_pred_companies = torch.max(return_ratios, axis=1)
+    tsteps = torch.arange(0, len(best_pred_companies)).long()
+    earn_gain = ground_truths[(tsteps, best_pred_companies)]
 
     # best possible for dataset
     best_gt_gain = torch.max(ground_truths, axis=1)[0]
@@ -615,7 +646,7 @@ if __name__ == '__main__':
     best_return = torch.sum(torch.mul(daily_investment, best_gt_gain))
     mean_return = torch.sum(torch.mul(daily_investment, mean_gt_gain))
 
-    print('pred_return:', pred_return.item())
-    print('earn_return:', earn_return.item())
-    print('best_return:', best_return.item())
-    print('mean_return:', mean_return.item())
+    print('total_pred_return:', pred_return.item())
+    print('total_earn_return:', earn_return.item())
+    print('total_best_return:', best_return.item())
+    print('total_mean_return:', mean_return.item())
