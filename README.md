@@ -64,6 +64,20 @@ data
           NYSE_rank_lstm_seq-8_unit-32_0.csv.npy
 ```
 
+# Run
+
+Below are the commands used to generate the results for this project.
+
+```
+python pytorch_relational_rank_model.py -m "NASDAQ" -rn "sector_industry" -ep 100
+python pytorch_relational_rank_model.py -m "NASDAQ" -rn "wikidata" -ep 100
+python pytorch_relational_rank_model.py -m "NASDAQ" -rn "correlational" -ep 100
+
+python pytorch_relational_rank_model.py -m "NYSE" -rn "sector_industry" -ep 100
+python pytorch_relational_rank_model.py -m "NYSE" -rn "wikidata" -ep 100
+python pytorch_relational_rank_model.py -m "NYSE" -rn "correlational" -ep 100
+```
+
 # Target Returns
 
 We present the target returns for two values of `skip_n_steps` because our relational tensor truncates the first `n` points for the correlations starting at `T-n` where `T` is the total number of timesteps under evaluation. The amounts reflect a policy of buying the `daily_investment` amount of the target stock(s) at each timestep and selling them at the same timestep. This removes the effect of compounding returns. 
