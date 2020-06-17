@@ -19,6 +19,11 @@ tar zxvf relation.tar.gz
 ```
 data
      relation
+          correlations_trained
+               NASDAQ
+                    ...1215 files uploaded
+               NYSE
+                    ...1215 files not uploaded (too big)
           sector_industry
                NASDAQ_industry_ticker.json
                NYSE_industry_ticker.json
