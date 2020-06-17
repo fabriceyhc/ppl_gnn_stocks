@@ -506,18 +506,6 @@ if __name__ == '__main__':
                 val_reg_loss += cur_reg_loss
                 val_rank_loss += cur_rank_loss
 
-                # cur_valid_pred[:, cur_offset - (train_range] = \
-                #     copy.copy(cur_rr[:, 0])
-                # cur_valid_gt[:, cur_offset - (train_range)] = \
-                #     copy.copy(gt_batch[:, 0])
-                # cur_valid_mask[:, cur_offset - (train_range)] = \
-                #     copy.copy(mask_batch[:, 0])
-
-            # cur_valid_pred = cur_valid_gt = cur_valid_mask = np.zeros(
-            #     [tickers_len, test_index - valid_index],
-            #     dtype=float
-            # )
-
             val_loss = val_loss.detach().cpu().numpy() / val_size
             val_reg_loss = val_reg_loss.detach().cpu().numpy() / val_size
             val_rank_loss = val_rank_loss.detach().cpu().numpy() / val_size
