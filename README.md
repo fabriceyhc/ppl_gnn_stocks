@@ -78,20 +78,4 @@ python pytorch_relational_rank_model.py -m "NYSE" -rn "wikidata" -ep 100
 python pytorch_relational_rank_model.py -m "NYSE" -rn "correlational" -ep 100
 ```
 
-# Target Returns
-
-We present the target returns for two values of `skip_n_steps` because our relational tensor truncates the first `n` points for the correlations starting at `T-n` where `T` is the total number of timesteps under evaluation. The amounts reflect a policy of buying the `daily_investment` amount of the target stock(s) at each timestep and selling them at the same timestep. This removes the effect of compounding returns. 
-
-## Optimal
-
-| skip_n_steps | daily_investment | NASDAQ | NYSE |
-|---|---|---|---|
-| 0 | 100.00 | 20102.418 | 16884.516 | 
-| 30 | 100.00 | 19622.406 | 16482.426 |
-
-## Average
-
-| skip_n_steps | daily_investment | NASDAQ | NYSE |
-|---|---|---|---|
-| 0 | 100.00 | 57.427822 | 35.447433 | 
-| 30 | 100.00 | 55.723846 | 31.19346 |
+Note that training works using rolling windows --- `train_size=200, val_size=20, test_size=20` --- and the number of windows is dynamically calculated by `num_steps \ train_size`. This results in each timestep being included in no more than 1 sliding window for `e=100` epochs each. 
