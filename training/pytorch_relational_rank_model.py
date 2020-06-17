@@ -61,13 +61,14 @@ class TorchReRaLSTM(torch.nn.Module):
         self.relation_name = relation_name
 
         # load data
-        self.tickers = np.genfromtxt(os.path.join(data_path, '..', tickers_fname),
+        self.tickers = np.genfromtxt(os.path.join(self.data_path, '..', self.tickers_fname),
                                      dtype=str, delimiter='\t', skip_header=False)
 
-        print('#tickers selected:', len(self.tickers))
+        self.num_tickers = len(self.tickers)
+        print('#tickers selected:', self.num_tickers)
 
         self.eod_data, self.mask_data, self.gt_data, self.price_data = \
-            load_EOD_data(data_path, market_name, self.tickers, steps)
+            load_EOD_data(self.data_path, self.market_name, self.tickers, steps)
 
         # relation data
         if self.relation_name == 'correlational':
@@ -90,6 +91,12 @@ class TorchReRaLSTM(torch.nn.Module):
         print('relation encoding shape:', self.rel_encoding.shape)
         print('relation mask shape:', self.rel_mask.shape)
 
+        if self.market_name == 'NASDAQ':
+            emb_fname = 'NASDAQ_rank_lstm_seq-16_unit-64_2.csv.npy'
+        elif self.market_name == 'NYSE':
+            emb_fname = 'NYSE_rank_lstm_seq-8_unit-32_0.csv.npy'
+        else:
+            raise ValueError('invalid market_name')
         self.embedding = np.load(
             os.path.join(self.data_path, '..', 'pretrain', emb_fname))
             # print('embedding shape:', self.embedding.shape)
@@ -103,8 +110,8 @@ class TorchReRaLSTM(torch.nn.Module):
         else:
             self.batch_size = batch_size
 
-        self.valid_index = 756
-        self.test_index = 1008
+        # self.valid_index = 756
+        # self.test_index = 1008
         self.trade_dates = self.mask_data.shape[1]
         self.fea_dim = 5
 
@@ -112,8 +119,8 @@ class TorchReRaLSTM(torch.nn.Module):
 
         # random shuffling of the batch data
         self.device = device
-        self.batch_offsets = np.arange(start=0, stop=self.valid_index, dtype=int)
-        np.random.shuffle(self.batch_offsets)
+        # self.batch_offsets = np.arange(start=0, stop=self.valid_index, dtype=int)
+        # np.random.shuffle(self.batch_offsets)
         
         self.lrelu = nn.LeakyReLU(0.2)
         self.rel_weightlayer = nn.Linear(self.rel_encoding.shape[-1], 1)
@@ -128,14 +135,10 @@ class TorchReRaLSTM(torch.nn.Module):
         self.predictionlayer = nn.Linear(self.params['unit'] * 2, 1)
         # nn.init.xavier_uniform_(self.predictionlayer, gain)
 
-        self.prev_relation = self.rel_encoding
 
-        self.money_after_days = 0
-
-
-    def get_batch(self, offset=None):
-        if offset is None:
-            offset = random.randrange(0, self.valid_index)
+    def get_batch(self, offset):
+        # if offset is None:
+        #     offset = random.randrange(0, self.valid_index)
         #gives the length of the sequence
         seq_len = self.params['seq']
 
@@ -152,97 +155,18 @@ class TorchReRaLSTM(torch.nn.Module):
         3. price_data with the same expansion o dimensions to make a tensor
         4. ground_truth data with the same expansion
         """
-        return self.embedding[:, offset, :], np.expand_dims(mask_batch, axis=1), np.expand_dims(
-                    self.price_data[:, offset + seq_len - 1], axis=1
-                ), \
-                np.expand_dims(
-                    self.gt_data[:, offset + seq_len + self.steps - 1], axis=1
-                )
+        emb_batch = self.embedding[:, offset, :]
+        mask_batch = np.expand_dims(mask_batch, axis=1)
+        price_batch = np.expand_dims(self.price_data[:, offset + seq_len - 1], axis=1)
+        gt_batch = np.expand_dims(self.gt_data[:, offset + seq_len + self.steps - 1], axis=1)
+
+        return emb_batch, mask_batch, price_batch, gt_batch
     
-    def forward(self, j, epoch = 1):
-
-        # the ground truths, mask, features and base_price are placeholders of sizes [batchsize x 1], i.e. vectors
-        ground_truth = torch.empty(self.batch_size, 1).to(device)
-        mask = torch.empty(self.batch_size, 1).to(device)
-
-        # feature is a matrix of size [batchsize x params's unit]
-        feature = torch.empty(self.batch_size, self.params['unit']).to(device)
-        base_price = torch.empty(self.batch_size,1).to(device)
-
+    def forward(self, j):
+        
         all_one = torch.ones([self.batch_size, 1], dtype=torch.float64).to(device)
 
-        # # getting the data
-        # if j < 756:
-        #     emb_batch, mask_batch, price_batch, gt_batch = self.get_batch(self.batch_offsets[j])
-        # else:
-        #     emb_batch, mask_batch, price_batch, gt_batch = self.get_batch(j)
-
-        emb_batch, mask_batch, price_batch, gt_batch = self.get_batch(j)
-        
-        # feature is a matrix of size [batchsize x params's unit]
-        feature = torch.tensor(emb_batch).to(device)
-        
-        # the ground truths, mask, features and base_price are placeholders of sizes [batchsize x 1], i.e. vectors
-        mask = torch.tensor(mask_batch).to(device)
-        ground_truth = torch.tensor(gt_batch).to(device)
-        base_price = torch.tensor(price_batch).to(device)
-      
-        if self.relation_name == 'correlational':
-            self.rel_encoding = load_corr_timestep(market_name=self.market_name, 
-                                                   t=j).squeeze_().unsqueeze_(-1).requires_grad_(True)
-            rel_shape = self.rel_encoding.shape
-            self.rel_mask = torch.where(self.rel_encoding == 0, 
-                                        torch.ones(rel_shape) * -1e9, 
-                                        torch.zeros(rel_shape)).squeeze_()
-
-        relation = self.rel_encoding.to(device)
-        rel_mask = self.rel_mask.float().to(device)
-
-        rel_weight = self.rel_weightlayer(relation).clamp(min = 0)
-        # print('rel_weight:', rel_weight.shape)
-        
-        if self.inner_prod:
-            # print('inner product weight')
-            inner_weight = torch.matmul(feature, torch.transpose(feature, 0,1).float())
-            weight = torch.mul(inner_weight, rel_weight[:, :, -1])
-        else:
-            # print('sum weight')
-            head_weight = self.head_weightlayer(feature).clamp(min = 0)
-            tail_weight = self.tail_weightlayer(feature).clamp(min = 0)
-            
-            """
-            weight is elementwise sum of
-                (sum of (head_weight * (vector of 1's) T + vector of 1's * (tail_weight)T )
-                + rel_weight[:, :, -1]) )
-            """
-            weight = torch.add(
-                torch.add(
-                    torch.matmul(head_weight, torch.transpose(all_one, 0,1).float()),
-                    torch.matmul(all_one.float(), torch.transpose(tail_weight, 0,1).float())
-                ), rel_weight[:, :, -1]
-            )
-        # print('weight', weight.shape)
-        
-        #rel_mask and weight are added. then an activation function is applied
-        weight_masked = self.weight_maskedsoftmax(torch.add(rel_mask, weight))
-        # print('weight_masked:', weight_masked.shape)
-        
-        #outputs_proped is weight_masked * feature
-        outputs_proped = torch.matmul(weight_masked, feature)
-        # print('outputs_proped:', outputs_proped.shape)
-        
-        if self.flat:
-            # print('one more hidden layer')
-            torch.cat(feature, outputs_proped, dim = 0)
-            # outputs_concatedlayer = nn.Linear(feature.shape[-1], self.params['unit'])
-            outputs_concated =  self.lrelu(self.outputs_concatedlayer(torch.cat((feature, outputs_proped), 1)))
-        else:
-            outputs_concated = torch.cat((feature, outputs_proped), 1)
-        
-        prediction = self.lrelu(self.predictionlayer(outputs_concated))
-
-        #return ratio = (prediction - price)/price
-        return_ratio = torch.div( (prediction - base_price), base_price)
+        return_ratio, ground_truth, mask = self.predict(start_idx=j)
         
         #reg_loss = MSE(ground_truth - return_ratio)
         reg_loss = weighted_mse_loss(inputs = return_ratio, target = ground_truth, weights = mask)
@@ -278,6 +202,116 @@ class TorchReRaLSTM(torch.nn.Module):
         a Tensor of output data. We can use Modules defined in the constructor as
         well as arbitrary operators on Tensors.
         """
+
+    def predict(self, start_idx, end_idx=None):
+        '''
+        Parameters:
+        start_idx : int, timestep to start predictions at
+        end_idx   : int, timestep to end predictions at. If None, 
+                         then only return for 1 timestep at start_idx
+        '''
+
+        if end_idx is None:
+            end_idx = start_idx + 1
+
+        num_steps = end_idx - start_idx
+
+        return_ratios = []
+        ground_truths = []
+        masks = []
+
+        for j in range(start_idx, end_idx):
+            # the ground truths, mask, features and base_price are placeholders of sizes [batchsize x 1], i.e. vectors
+            ground_truth = torch.empty(self.batch_size, 1).to(device)
+            mask = torch.empty(self.batch_size, 1).to(device)
+
+            # feature is a matrix of size [batchsize x params's unit]
+            feature = torch.empty(self.batch_size, self.params['unit']).to(device)
+            base_price = torch.empty(self.batch_size,1).to(device)
+
+            all_one = torch.ones([self.batch_size, 1], dtype=torch.float64).to(device)
+
+            # # getting the data
+            # if j < 756:
+            #     emb_batch, mask_batch, price_batch, gt_batch = self.get_batch(self.batch_offsets[j])
+            # else:
+            #     emb_batch, mask_batch, price_batch, gt_batch = self.get_batch(j)
+
+            emb_batch, mask_batch, price_batch, gt_batch = self.get_batch(j)
+            
+            # feature is a matrix of size [batchsize x params's unit]
+            feature = torch.tensor(emb_batch).to(device)
+            
+            # the ground truths, mask, features and base_price are placeholders of sizes [batchsize x 1], i.e. vectors
+            mask = torch.tensor(mask_batch).to(device)
+            ground_truth = torch.tensor(gt_batch).to(device)
+            base_price = torch.tensor(price_batch).to(device)
+
+            ground_truths.append(ground_truth)
+            masks.append(mask)
+          
+            if self.relation_name == 'correlational':
+                self.rel_encoding = load_corr_timestep(market_name=self.market_name, 
+                                                       t=j).squeeze_().unsqueeze_(-1).requires_grad_(True)
+                rel_shape = self.rel_encoding.shape
+                self.rel_mask = torch.where(self.rel_encoding == 0, 
+                                            torch.ones(rel_shape) * -1e9, 
+                                            torch.zeros(rel_shape)).squeeze_()
+
+            relation = self.rel_encoding.to(device)
+            rel_mask = self.rel_mask.float().to(device)
+
+            rel_weight = self.rel_weightlayer(relation).clamp(min = 0)
+            # print('rel_weight:', rel_weight.shape)
+            
+            if self.inner_prod:
+                # print('inner product weight')
+                inner_weight = torch.matmul(feature, torch.transpose(feature, 0,1).float())
+                weight = torch.mul(inner_weight, rel_weight[:, :, -1])
+            else:
+                # print('sum weight')
+                head_weight = self.head_weightlayer(feature).clamp(min = 0)
+                tail_weight = self.tail_weightlayer(feature).clamp(min = 0)
+                
+                """
+                weight is elementwise sum of
+                    (sum of (head_weight * (vector of 1's) T + vector of 1's * (tail_weight)T )
+                    + rel_weight[:, :, -1]) )
+                """
+                weight = torch.add(
+                    torch.add(
+                        torch.matmul(head_weight, torch.transpose(all_one, 0,1).float()),
+                        torch.matmul(all_one.float(), torch.transpose(tail_weight, 0,1).float())
+                    ), rel_weight[:, :, -1]
+                )
+            # print('weight', weight.shape)
+            
+            #rel_mask and weight are added. then an activation function is applied
+            weight_masked = self.weight_maskedsoftmax(torch.add(rel_mask, weight))
+            # print('weight_masked:', weight_masked.shape)
+            
+            #outputs_proped is weight_masked * feature
+            outputs_proped = torch.matmul(weight_masked, feature)
+            # print('outputs_proped:', outputs_proped.shape)
+            
+            if self.flat:
+                # print('one more hidden layer')
+                torch.cat(feature, outputs_proped, dim = 0)
+                # outputs_concatedlayer = nn.Linear(feature.shape[-1], self.params['unit'])
+                outputs_concated =  self.lrelu(self.outputs_concatedlayer(torch.cat((feature, outputs_proped), 1)))
+            else:
+                outputs_concated = torch.cat((feature, outputs_proped), 1)
+            
+            prediction = self.lrelu(self.predictionlayer(outputs_concated))
+
+            #return ratio = (prediction - price)/price
+            return_ratios.append(torch.div( (prediction - base_price), base_price))
+
+        return_ratios = torch.cat(return_ratios, dim=1).float().to(device)
+        ground_truths = torch.cat(ground_truths, dim=1).float().to(device)
+        masks = torch.cat(masks, dim=1).float().to(device)
+
+        return return_ratios, ground_truths, masks
 
 if __name__ == '__main__':
     desc = 'train a relational rank lstm model'
@@ -348,28 +382,31 @@ if __name__ == '__main__':
     model.to(device)
 
     model_found = False
-    # if args.use_pretrain == True:
-    #     model, model_found = get_pretrained_weights(model, device, args.save_model_path)
+    if args.use_pretrain == True:
+        model, model_found = get_pretrained_weights(model, device, args.save_model_path)
     
+    tickers_len = len(model.tickers)
+
+    epochs = args.epochs
+    steps = args.s
+
+    num_timesteps = 1215    
+    train_size = args.train_size
+    val_size = args.val_size
+    test_size = args.test_size
+    num_windows = math.floor(num_timesteps / train_size) # 5
+    print('num_windows:', num_windows)
+
+    start_idx = 0
+
     if not args.use_pretrain or not model_found: 
-    
+
         criterion = torch.nn.MSELoss(reduction='sum')
         optimizer = torch.optim.Adam(model.parameters(), lr=params['lr'])
-        epochs = args.epochs
-        steps = args.s
-        tickers_len = len(model.tickers)
-        fea_dim = 5
-
-        num_timesteps = 1215
-        train_size = args.train_size
-        val_size = args.val_size
-        test_size = args.test_size
-        num_windows = math.floor(num_timesteps / train_size) # 5
-        print('num_windows:', num_windows)
-
-        start_idx = 0
 
         print_freq = math.floor(train_size / 5)
+
+        start = time()
 
         for window in range(1, num_windows + 1):
 
@@ -388,7 +425,6 @@ if __name__ == '__main__':
             print('valid_range:\t', valid_range)
             print('test_range:\t', test_range)
 
-            start = time()
             ### TRAIN #################################################################
             for epoch in range(1, epochs + 1):
                 
@@ -429,7 +465,7 @@ if __name__ == '__main__':
                     if args.rel_name == 'correlational':
                         corr_t = model.rel_encoding.clone().detach()
                         grad_t = model.rel_encoding.grad
-                        corr_t -= (grad_t * params['lr'])
+                        corr_t -= (grad_t * 0.1 * params['lr'])
                         save_corr_timestep(data=corr_t, 
                                            market_name=model.market_name, 
                                            t=t)
@@ -447,7 +483,7 @@ if __name__ == '__main__':
                 if not os.path.exists(path):
                     os.makedirs(path)
                 str_date = str(datetime.date.today())
-                save_file_path = os.path.join(path, 'model_' + str(epochs) + 'epochs_roll' 
+                save_file_path = os.path.join(path, 'model_' + str(epochs) + 'epochs_window' 
                                                 + str(window) + '_'
                                                 + model.market_name + '_'
                                                 + model.relation_name + '_loss'
@@ -518,34 +554,99 @@ if __name__ == '__main__':
 
     print('training complete')
 
-# best_valid_pred = best_valid_gt = best_valid_mask = np.zeros(
-#     [len(self.tickers), self.test_index - self.valid_index],
-#     dtype=float
-# )
-# best_valid_gt = np.zeros(
-#     [len(self.tickers), self.test_index - self.valid_index],
-#     dtype=float
-# )
-# best_valid_mask = np.zeros(
-#     [len(self.tickers), self.test_index - self.valid_index],
-#     dtype=float
-# )
-# best_test_pred = np.zeros(
-#     [len(self.tickers), self.trade_dates - self.parameters['seq'] -
-#      self.test_index - self.steps + 1], dtype=float
-# )
-# best_test_gt = np.zeros(
-#     [len(self.tickers), self.trade_dates - self.parameters['seq'] -
-#      self.test_index - self.steps + 1], dtype=float
-# )
-# best_test_mask = np.zeros(
-#     [len(self.tickers), self.trade_dates - self.parameters['seq'] -
-#      self.test_index - self.steps + 1], dtype=float
-# )
-# best_valid_perf = {
-#     'mse': np.inf, 'mrrt': 0.0, 'btl': 0.0
-# }
-# best_test_perf = {
-#     'mse': np.inf, 'mrrt': 0.0, 'btl': 0.0
-# }
-# best_valid_loss = np.inf
+    print('begin evaluation')
+
+    start_idx = 0
+
+    return_ratios = []
+    ground_truths = []
+
+    for window in range(1, num_windows + 1):
+
+        # update indices for the rolling window
+        valid_index = start_idx   + train_size
+        test_index  = valid_index + val_size 
+        trade_dates = min(test_index  + test_size, num_timesteps - 1) 
+
+        train_range = valid_index - params['seq'] - steps + 1
+        valid_range = test_index  - params['seq'] - steps + 1
+        test_range  = trade_dates - params['seq'] - steps + 1
+
+        print('window:\t', window)
+        print('start_idx:\t', start_idx)
+        print('train_range:\t', train_range)
+        print('valid_range:\t', valid_range)
+        print('test_range:\t', test_range)
+
+        return_ratio, ground_truth, _ = model.predict(start_idx=test_index, end_idx=trade_dates)
+
+        return_ratio = return_ratio.T
+        ground_truth = ground_truth.T
+
+        # calculate window MSE
+        MSE = F.mse_loss(return_ratio, ground_truth)
+        print('window_MSE:', MSE.item())
+
+        # calculate window returns
+        daily_investment = 100
+
+        # our returns for dataset
+        best_pred_gain, best_pred_companies = torch.max(return_ratio, axis=1)
+        tsteps = torch.arange(0, len(best_pred_companies)).long()
+        earn_gain = ground_truth[(tsteps, best_pred_companies)]
+
+        # best possible for dataset
+        best_gt_gain = torch.max(ground_truth, axis=1)[0]
+
+        # average for dataset
+        mean_gt_gain = torch.mean(ground_truth, axis=1)[0]
+
+        pred_return = torch.sum(torch.mul(daily_investment, best_pred_gain))
+        earn_return = torch.sum(torch.mul(daily_investment, earn_gain))
+        best_return = torch.sum(torch.mul(daily_investment, best_gt_gain))
+        mean_return = torch.sum(torch.mul(daily_investment, mean_gt_gain))
+
+        print('window_pred_return:', pred_return.item())
+        print('window_earn_return:', earn_return.item())
+        print('window_best_return:', best_return.item())
+        print('window_mean_return:', mean_return.item())
+
+        return_ratios.append(return_ratio)
+        ground_truths.append(ground_truth)
+
+        # move the starting index up
+        start_idx = train_range
+
+    return_ratios = torch.cat(return_ratios, dim=0)
+    ground_truths = torch.cat(ground_truths, dim=0)
+
+    # print(return_ratios.shape, ground_truths.shape)
+    # print(return_ratios, ground_truths)
+
+    # calculate total MSE
+    MSE = F.mse_loss(return_ratios, ground_truths)
+    print('total_MSE:', MSE.item())
+
+    # calculate total returns
+    daily_investment = 100
+
+    # our returns for dataset
+    best_pred_gain, best_pred_companies = torch.max(return_ratios, axis=1)
+    tsteps = torch.arange(0, len(best_pred_companies)).long()
+    earn_gain = ground_truths[(tsteps, best_pred_companies)]
+
+    # best possible for dataset
+    best_gt_gain = torch.max(ground_truths, axis=1)[0]
+
+    # average for dataset
+    mean_gt_gain = torch.mean(ground_truths, axis=1)[0]
+
+    pred_return = torch.sum(torch.mul(daily_investment, best_pred_gain))
+    earn_return = torch.sum(torch.mul(daily_investment, earn_gain))
+    best_return = torch.sum(torch.mul(daily_investment, best_gt_gain))
+    mean_return = torch.sum(torch.mul(daily_investment, mean_gt_gain))
+
+    print('total_pred_return:', pred_return.item())
+    print('total_earn_return:', earn_return.item())
+    print('total_best_return:', best_return.item())
+    print('total_mean_return:', mean_return.item())
