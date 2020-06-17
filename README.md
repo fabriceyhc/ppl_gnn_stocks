@@ -74,13 +74,13 @@ data
 Below are the commands used to generate the results for this project.
 
 ```
-python pytorch_relational_rank_model.py -m "NASDAQ" -rn "sector_industry" -ep 100 -up 0
-python pytorch_relational_rank_model.py -m "NASDAQ" -rn "wikidata" -ep 100 -up 0
-python pytorch_relational_rank_model.py -m "NASDAQ" -rn "correlational" -ep 100 -up 0
+python pytorch_relational_rank_model.py -m "NASDAQ" -ep 100 -up 0 -rn "sector_industry" 
+python pytorch_relational_rank_model.py -m "NASDAQ" -ep 100 -up 0 -rn "wikidata" 
+python pytorch_relational_rank_model.py -m "NASDAQ" -ep 100 -up 0 -rn "correlational" 
 
-python pytorch_relational_rank_model.py -m "NYSE" -rn "sector_industry" -ep 100 -up 0 -u 32
-python pytorch_relational_rank_model.py -m "NYSE" -rn "wikidata" -ep 100 -up 0 -u 32
-python pytorch_relational_rank_model.py -m "NYSE" -rn "correlational" -ep 100 -up 0 -u 32
+python pytorch_relational_rank_model.py -m "NYSE" -ep 100 -up 0 -u 32 -rn "sector_industry" 
+python pytorch_relational_rank_model.py -m "NYSE" -ep 100 -up 0 -u 32 -rn "wikidata" 
+python pytorch_relational_rank_model.py -m "NYSE" -ep 100 -up 0 -u 32 -rn "correlational" 
 ```
 
 Note that training works using rolling windows --- `train_size=200, val_size=20, test_size=20` --- and the number of windows is dynamically calculated by `num_steps \ train_size`. This results in each timestep being included in no more than 1 sliding window for `ep=100` epochs each. 
