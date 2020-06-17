@@ -61,14 +61,14 @@ class TorchReRaLSTM(torch.nn.Module):
         self.relation_name = relation_name
 
         # load data
-        self.tickers = np.genfromtxt(os.path.join(data_path, '..', tickers_fname),
+        self.tickers = np.genfromtxt(os.path.join(self.data_path, '..', self.tickers_fname),
                                      dtype=str, delimiter='\t', skip_header=False)
 
         self.num_tickers = len(self.tickers)
         print('#tickers selected:', self.num_tickers)
 
         self.eod_data, self.mask_data, self.gt_data, self.price_data = \
-            load_EOD_data(data_path, market_name, self.tickers, steps)
+            load_EOD_data(self.data_path, self.market_name, self.tickers, steps)
 
         # relation data
         if self.relation_name == 'correlational':
@@ -91,6 +91,12 @@ class TorchReRaLSTM(torch.nn.Module):
         print('relation encoding shape:', self.rel_encoding.shape)
         print('relation mask shape:', self.rel_mask.shape)
 
+        if self.market_name == 'NASDAQ':
+            emb_fname = 'NASDAQ_rank_lstm_seq-16_unit-64_2.csv.npy'
+        elif self.market_name == 'NYSE':
+            emb_fname = 'NYSE_rank_lstm_seq-8_unit-32_0.csv.npy'
+        else:
+            raise ValueError('invalid market_name')
         self.embedding = np.load(
             os.path.join(self.data_path, '..', 'pretrain', emb_fname))
             # print('embedding shape:', self.embedding.shape)
@@ -129,12 +135,10 @@ class TorchReRaLSTM(torch.nn.Module):
         self.predictionlayer = nn.Linear(self.params['unit'] * 2, 1)
         # nn.init.xavier_uniform_(self.predictionlayer, gain)
 
-        self.money_after_days = 0
 
-
-    def get_batch(self, offset=None):
-        if offset is None:
-            offset = random.randrange(0, self.valid_index)
+    def get_batch(self, offset):
+        # if offset is None:
+        #     offset = random.randrange(0, self.valid_index)
         #gives the length of the sequence
         seq_len = self.params['seq']
 
@@ -151,12 +155,12 @@ class TorchReRaLSTM(torch.nn.Module):
         3. price_data with the same expansion o dimensions to make a tensor
         4. ground_truth data with the same expansion
         """
-        return self.embedding[:, offset, :], np.expand_dims(mask_batch, axis=1), np.expand_dims(
-                    self.price_data[:, offset + seq_len - 1], axis=1
-                ), \
-                np.expand_dims(
-                    self.gt_data[:, offset + seq_len + self.steps - 1], axis=1
-                )
+        emb_batch = self.embedding[:, offset, :]
+        mask_batch = np.expand_dims(mask_batch, axis=1)
+        price_batch = np.expand_dims(self.price_data[:, offset + seq_len - 1], axis=1)
+        gt_batch = np.expand_dims(self.gt_data[:, offset + seq_len + self.steps - 1], axis=1)
+
+        return emb_batch, mask_batch, price_batch, gt_batch
     
     def forward(self, j):
         
@@ -461,7 +465,7 @@ if __name__ == '__main__':
                     if args.rel_name == 'correlational':
                         corr_t = model.rel_encoding.clone().detach()
                         grad_t = model.rel_encoding.grad
-                        corr_t -= (grad_t * params['lr'])
+                        corr_t -= (grad_t * 0.1 * params['lr'])
                         save_corr_timestep(data=corr_t, 
                                            market_name=model.market_name, 
                                            t=t)
@@ -479,7 +483,7 @@ if __name__ == '__main__':
                 if not os.path.exists(path):
                     os.makedirs(path)
                 str_date = str(datetime.date.today())
-                save_file_path = os.path.join(path, 'model_' + str(epochs) + 'epochs_roll' 
+                save_file_path = os.path.join(path, 'model_' + str(epochs) + 'epochs_window' 
                                                 + str(window) + '_'
                                                 + model.market_name + '_'
                                                 + model.relation_name + '_loss'
