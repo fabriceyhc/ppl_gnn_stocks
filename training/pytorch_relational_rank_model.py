@@ -638,4 +638,3 @@ if __name__ == '__main__':
     print('total_earn_return:', earn_return.item())
     print('total_best_return:', best_return.item())
     print('total_mean_return:', mean_return.item())
-    print('total_mean_return:', mean_return.item())
