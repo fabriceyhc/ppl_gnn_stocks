@@ -171,11 +171,13 @@ class TorchReRaLSTM(torch.nn.Module):
 
         all_one = torch.ones([self.batch_size, 1], dtype=torch.float64).to(device)
 
-        # getting the data
-        if j < 756:
-            emb_batch, mask_batch, price_batch, gt_batch = self.get_batch(self.batch_offsets[j])
-        else:
-            emb_batch, mask_batch, price_batch, gt_batch = self.get_batch(j)
+        # # getting the data
+        # if j < 756:
+        #     emb_batch, mask_batch, price_batch, gt_batch = self.get_batch(self.batch_offsets[j])
+        # else:
+        #     emb_batch, mask_batch, price_batch, gt_batch = self.get_batch(j)
+
+        emb_batch, mask_batch, price_batch, gt_batch = self.get_batch(j)
         
         # feature is a matrix of size [batchsize x params's unit]
         feature = torch.tensor(emb_batch).to(device)
@@ -369,7 +371,7 @@ if __name__ == '__main__':
 
         print_freq = math.floor(train_size / 5)
 
-        for roll in range(1, num_windows + 1):
+        for window in range(1, num_windows + 1):
 
             # update indices for the rolling window
             valid_index = start_idx   + train_size # originally 756 
@@ -380,6 +382,7 @@ if __name__ == '__main__':
             valid_range = test_index  - params['seq'] - steps + 1
             test_range  = trade_dates - params['seq'] - steps + 1
 
+            print('window:\t', window)
             print('start_idx:\t', start_idx)
             print('train_range:\t', train_range)
             print('valid_range:\t', valid_range)
@@ -398,7 +401,7 @@ if __name__ == '__main__':
                 tra_reg_loss = 0.0
                 tra_rank_loss = 0.0
 
-                for t in range(start_idx, train_range - 1):
+                for i, t in enumerate(range(start_idx, train_range - 1)):
                     # Forward pass: Compute predicted y by passing x to the model
                     cur_loss, cur_reg_loss, cur_rank_loss= model(j = t)
 
@@ -409,7 +412,7 @@ if __name__ == '__main__':
                                epoch, 
                                t, 
                                train_range,
-                               100. * (t/train_range), 
+                               100. * (i/train_size), 
                                loss, 
                                (time() - start)))
                     
@@ -445,7 +448,7 @@ if __name__ == '__main__':
                     os.makedirs(path)
                 str_date = str(datetime.date.today())
                 save_file_path = os.path.join(path, 'model_' + str(epochs) + 'epochs_roll' 
-                                                + str(roll) + '_'
+                                                + str(window) + '_'
                                                 + model.market_name + '_'
                                                 + model.relation_name + '_loss'
                                                 + str(round(tra_loss.item(),2)) + '_'
