@@ -83,4 +83,4 @@ python pytorch_relational_rank_model.py -m "NYSE" -rn "wikidata" -ep 100
 python pytorch_relational_rank_model.py -m "NYSE" -rn "correlational" -ep 100
 ```
 
-Note that training works using rolling windows --- `train_size=200, val_size=20, test_size=20` --- and the number of windows is dynamically calculated by `num_steps \ train_size`. This results in each timestep being included in no more than 1 sliding window for `e=100` epochs each. 
+Note that training works using rolling windows --- `train_size=200, val_size=20, test_size=20` --- and the number of windows is dynamically calculated by `num_steps \ train_size`. This results in each timestep being included in no more than 1 sliding window for `ep=100` epochs each. 
