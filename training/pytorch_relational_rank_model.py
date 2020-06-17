@@ -4,6 +4,7 @@ import numpy as np
 import random
 import datetime
 import glob
+import math
 from time import time
 import os
 os.environ['KMP_WARNINGS'] = '0'
@@ -306,7 +307,9 @@ if __name__ == '__main__':
     parser.add_argument('-sp', '--save_model_path', default='pretrained_model')
     parser.add_argument('-up', '--use_pretrain', default=1, help='searches save_model_path \
                         for pretrained weights and skips training.')
-    parser.add_argument('-rw', '--rolling_window', default = None, help='rolling window size')
+    parser.add_argument('-trs', '--train_size', default=200, help='size of training window')
+    parser.add_argument('-vas', '--val_size',   default=20,  help='size of validation window')
+    parser.add_argument('-tes', '--test_size',  default=20,  help='size of testing window')
     args = parser.parse_args()
 
     if args.t is None:
@@ -352,71 +355,97 @@ if __name__ == '__main__':
         optimizer = torch.optim.Adam(model.parameters(), lr=params['lr'])
         epochs = args.epochs
         steps = args.s
-        valid_index = 756
-        test_index = 1008
-        trade_dates = 1245
+        tickers_len = len(model.tickers)
         fea_dim = 5
-        tickers_len = 1026
 
-        train_range = valid_index - params['seq'] - steps + 1
-        valid_range = test_index - params['seq'] - steps + 1
-        test_range = trade_dates - params['seq'] - steps + 1
+        num_timesteps = 1215
+        train_size = args.train_size
+        val_size = args.val_size
+        test_size = args.test_size
+        num_windows = math.floor(num_timesteps / train_size) # 5
+        print('num_windows:', num_windows)
 
-        for roll in range(1, 1 + 1):
-            i = roll
-            
-            best_valid_pred = best_valid_gt = best_valid_mask = np.zeros(
-            [tickers_len, test_index - valid_index] ,
-            dtype=float
-            )
-            
-            tra_loss = 0.0
-            tra_reg_loss = 0.0
-            tra_rank_loss = 0.0
+        start_idx = 0
+
+        print_freq = math.floor(train_size / 5)
+
+        for roll in range(1, num_windows + 1):
+
+            # update indices for the rolling window
+            valid_index = start_idx   + train_size # originally 756 
+            test_index  = valid_index + val_size   # originally 1008
+            trade_dates = test_index  + test_size  # originally 1215
+
+            train_range = valid_index - params['seq'] - steps + 1
+            valid_range = test_index  - params['seq'] - steps + 1
+            test_range  = trade_dates - params['seq'] - steps + 1
+
+            print('start_idx:\t', start_idx)
+            print('train_range:\t', train_range)
+            print('valid_range:\t', valid_range)
+            print('test_range:\t', test_range)
 
             start = time()
-            for t in range(train_range):
-                # Forward pass: Compute predicted y by passing x to the model
-                cur_loss, cur_reg_loss, cur_rank_loss= model(j = t)
-
-                # Compute and print loss
-                if t % 100 == 0:
-                    loss = cur_loss.item() / train_range
-                    print('Train Epoch: {} ({:.0f}%) \t Training Loss: {:.6f} \t '.format(
-                        i, 100. * (t/train_range), loss))
+            ### TRAIN #################################################################
+            for epoch in range(1, epochs + 1):
                 
-                tra_loss += cur_loss
-                tra_reg_loss += cur_reg_loss
-                tra_rank_loss += cur_rank_loss
+                best_valid_pred = best_valid_gt = best_valid_mask = np.zeros(
+                [tickers_len, test_index - valid_index] ,
+                dtype=float
+                )
                 
-                # Zero gradients, perform a backward pass, and update the weights.
-                optimizer.zero_grad()
-                cur_loss.backward()
-                optimizer.step()
+                tra_loss = 0.0
+                tra_reg_loss = 0.0
+                tra_rank_loss = 0.0
 
-                # save the trained correlational weights for timestep t
-                if args.rel_name == 'correlational':
-                    corr_t = model.rel_encoding.clone().detach()
-                    grad_t = model.rel_encoding.grad
-                    corr_t -= (grad_t * params['lr'])
-                    save_corr_timestep(data=corr_t, 
-                                        market_name=model.market_name, 
-                                        t=t)
+                for t in range(start_idx, train_range - 1):
+                    # Forward pass: Compute predicted y by passing x to the model
+                    cur_loss, cur_reg_loss, cur_rank_loss= model(j = t)
 
-            tra_loss = tra_loss.detach().cpu().numpy() / train_range
-            tra_reg_loss = tra_reg_loss.detach().cpu().numpy() / train_range
-            tra_rank_loss = tra_rank_loss.detach().cpu().numpy() / train_range
+                    # Compute and print loss
+                    if t % print_freq == 0:
+                        loss = cur_loss.item() / train_size
+                        print('Train Epoch: {} [{}/{} ({:.0f}%)] \t Loss: {:.6f} \t Time: {:.2f}'.format(
+                               epoch, 
+                               t, 
+                               train_range,
+                               100. * (t/train_range), 
+                               loss, 
+                               (time() - start)))
+                    
+                    tra_loss += cur_loss
+                    tra_reg_loss += cur_reg_loss
+                    tra_rank_loss += cur_rank_loss
+                    
+                    # Zero gradients, perform a backward pass, and update the weights.
+                    optimizer.zero_grad()
+                    cur_loss.backward()
+                    optimizer.step()
 
-            print('Train Loss:', tra_loss.item(), 
-                                    tra_reg_loss.item(), 
-                                    tra_rank_loss.item())
+                    # save the trained correlational weights for timestep t
+                    if args.rel_name == 'correlational':
+                        corr_t = model.rel_encoding.clone().detach()
+                        grad_t = model.rel_encoding.grad
+                        corr_t -= (grad_t * params['lr'])
+                        save_corr_timestep(data=corr_t, 
+                                           market_name=model.market_name, 
+                                           t=t)
+                tra_loss = tra_loss.detach().cpu().numpy() / train_size
+                tra_reg_loss = tra_reg_loss.detach().cpu().numpy() / train_size
+                tra_rank_loss = tra_rank_loss.detach().cpu().numpy() / train_size
+
+                print('Train loss: {:.6f} \t reg_loss: {:.6f} \t rank_loss: {:.6f}'.format(
+                    tra_loss.item(),
+                    tra_reg_loss.item(),
+                    tra_rank_loss.item()))
 
             if args.save_model:
                 path = args.save_model_path
                 if not os.path.exists(path):
                     os.makedirs(path)
                 str_date = str(datetime.date.today())
-                save_file_path = os.path.join(path, 'model_' + str(epochs) + 'epochs_' 
+                save_file_path = os.path.join(path, 'model_' + str(epochs) + 'epochs_roll' 
+                                                + str(roll) + '_'
                                                 + model.market_name + '_'
                                                 + model.relation_name + '_loss'
                                                 + str(round(tra_loss.item(),2)) + '_'
@@ -425,70 +454,64 @@ if __name__ == '__main__':
 
             print('training complete in', str(time() - start), 'seconds')
 
+            ### VALIDATION ############################################################
+            # Note: validation is done using the last tensor from training
+            val_loss = 0.0
+            val_reg_loss = 0.0
+            val_rank_loss = 0.0
+            
+            for cur_offset in range(train_range, valid_range - 1):
+                cur_loss, cur_reg_loss, cur_rank_loss= model(j = valid_index-1)
 
-        val_loss = 0.0
-        val_reg_loss = 0.0
-        val_rank_loss = 0.0
-        
-        for cur_offset in range(train_range, valid_range):
-            # Forward pass: Compute predicted y by passing x to the model
-            cur_loss, cur_reg_loss, cur_rank_loss= model(j = cur_offset)
+                val_loss += cur_loss
+                val_reg_loss += cur_reg_loss
+                val_rank_loss += cur_rank_loss
 
-            val_loss += cur_loss
-            val_reg_loss += cur_reg_loss
-            val_rank_loss += cur_rank_loss
+                # cur_valid_pred[:, cur_offset - (train_range] = \
+                #     copy.copy(cur_rr[:, 0])
+                # cur_valid_gt[:, cur_offset - (train_range)] = \
+                #     copy.copy(gt_batch[:, 0])
+                # cur_valid_mask[:, cur_offset - (train_range)] = \
+                #     copy.copy(mask_batch[:, 0])
 
-            if t % 100 == 0:
-                loss = cur_loss.item() / (valid_range - train_range)
-                print('Train Epoch: {} ({:.0f}%) \t Validation Loss: {:.6f} \t '.format(
-                    i, 100. * (t/valid_range - train_range), loss))
+            # cur_valid_pred = cur_valid_gt = cur_valid_mask = np.zeros(
+            #     [tickers_len, test_index - valid_index],
+            #     dtype=float
+            # )
 
-            # cur_valid_pred[:, cur_offset - (train_range] = \
-            #     copy.copy(cur_rr[:, 0])
-            # cur_valid_gt[:, cur_offset - (train_range)] = \
-            #     copy.copy(gt_batch[:, 0])
-            # cur_valid_mask[:, cur_offset - (train_range)] = \
-            #     copy.copy(mask_batch[:, 0])
+            val_loss = val_loss.detach().cpu().numpy() / val_size
+            val_reg_loss = val_reg_loss.detach().cpu().numpy() / val_size
+            val_rank_loss = val_rank_loss.detach().cpu().numpy() / val_size
+            
+            print('Valid loss: {:.6f} \t reg_loss: {:.6f} \t rank_loss: {:.6f}'.format(
+                val_loss.item(),
+                val_reg_loss.item(),
+                val_rank_loss.item()))
 
-        # cur_valid_pred = cur_valid_gt = cur_valid_mask = np.zeros(
-        #     [tickers_len, test_index - valid_index],
-        #     dtype=float
-        # )
+            ### TEST ##################################################################
+            # Note: validation is done using the last tensor from training
+            test_loss = 0.0
+            test_reg_loss = 0.0
+            test_rank_loss = 0.0
 
-        print('Valid MSE:',
-        val_loss.detach().numpy() / (valid_range - train_range),
-        val_reg_loss.detach().numpy() / (valid_range - train_range),
-        val_rank_loss.detach().numpy() / (valid_range - train_range))
+            for cur_offset in range(valid_range, test_range - 1):
+                cur_loss, cur_reg_loss, cur_rank_loss= model(j = valid_index - 1)
 
-        test_loss = 0.0
-        test_reg_loss = 0.0
-        test_rank_loss = 0.0
+                test_loss += cur_loss
+                test_reg_loss += cur_reg_loss
+                test_rank_loss += cur_rank_loss
 
-        for cur_offset in range(valid_range, test_range):
-            cur_loss, cur_reg_loss, cur_rank_loss= model(j = cur_offset)
+            test_loss = test_loss.detach().cpu().numpy() / test_size
+            test_reg_loss = test_reg_loss.detach().cpu().numpy() / test_size
+            test_rank_loss = test_rank_loss.detach().cpu().numpy() / test_size
+            
+            print('Test loss: {:.6f} \t reg_loss: {:.6f} \t rank_loss: {:.6f}'.format(
+                test_loss.item(),
+                test_reg_loss.item(),
+                test_rank_loss.item()))
 
-            if t % 100 == 0:
-                loss = cur_loss.item() / (test_range - valid_range)
-                print('Train Epoch: {} ({:.0f}%) \t Testing Loss: {:.6f} \t '.format(
-                    i, 100. * (t/test_range - valid_range), loss))
-
-            test_loss += cur_loss
-            test_reg_loss += cur_reg_loss
-            test_rank_loss += cur_rank_loss
-        
-        print('Test MSE:',
-        test_loss.detach().numpy() / (test_range - valid_range),
-        test_reg_loss.detach().numpy() / (test_range - valid_range),
-        test_rank_loss.detach().numpy() / (test_range - valid_range))
-
-
-
-
-
-
-
-
-
+            # move the starting index up
+            start_idx = train_range
 
     print('training complete')
 
