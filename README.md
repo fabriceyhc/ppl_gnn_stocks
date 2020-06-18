@@ -3,7 +3,7 @@ Final project repo for UCLA CS 267A
 
 [scratch_pad.ipynb (colab)](https://colab.research.google.com/drive/1BYBE7WeGu4jv2cFyD6LZR5u5ToVV1cok?usp=sharing) # use this notebook to test functions collaboratively
 
-[tutorials_(colab)](https://colab.research.google.com/drive/11kPl_81fmaIqoUH48Ozl3N83uXqL7xXO) # use this notebook for examples of GNN applications
+[gnn_tutorial.ipynb (colab)](https://colab.research.google.com/drive/11kPl_81fmaIqoUH48Ozl3N83uXqL7xXO) # use this notebook for examples of GNN applications
 
 [pyro_stocks.ipynb (colab)](https://colab.research.google.com/drive/1f8UDNfQdb_fGI3jcMfwl-70rRr-aSOCA#scrollTo=c20pAMkoOo1H) # use this notebook to check out stock modeling with Pyro
 
