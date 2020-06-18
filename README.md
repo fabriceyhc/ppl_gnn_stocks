@@ -20,11 +20,11 @@ tar zxvf relation.tar.gz
 ```
 data
      relation
-          correlation_trained
+          correlations_trained
                NASDAQ
-                    1215 files uploaded...
+                    ...1215 files uploaded
                NYSE
-                    1215 files not uploaded (too big)...
+                    ...1215 files not uploaded (too big)
           sector_industry
                NASDAQ_industry_ticker.json
                NYSE_industry_ticker.json
@@ -70,20 +70,18 @@ data
           NYSE_rank_lstm_seq-8_unit-32_0.csv.npy
 ```
 
-# Target Returns
+# Run
 
-We present the target returns for two values of `skip_n_steps` because our relational tensor truncates the first `n` points for the correlations starting at `T-n` where `T` is the total number of timesteps under evaluation. The amounts reflect a policy of buying the `daily_investment` amount of the target stock(s) at each timestep and selling them at the same timestep. This removes the effect of compounding returns. 
+Below are the commands used to generate the results for this project.
 
-## Optimal
+```
+python pytorch_relational_rank_model.py -m "NASDAQ" -ep 100 -up 0 -rn "sector_industry" 
+python pytorch_relational_rank_model.py -m "NASDAQ" -ep 100 -up 0 -rn "wikidata" 
+python pytorch_relational_rank_model.py -m "NASDAQ" -ep 100 -up 0 -rn "correlational" 
 
-| skip_n_steps | daily_investment | NASDAQ | NYSE |
-|---|---|---|---|
-| 0 | 100.00 | 20102.418 | 16884.516 | 
-| 30 | 100.00 | 19622.406 | 16482.426 |
+python pytorch_relational_rank_model.py -m "NYSE" -ep 100 -up 0 -u 32 -rn "sector_industry" 
+python pytorch_relational_rank_model.py -m "NYSE" -ep 100 -up 0 -u 32 -rn "wikidata" 
+python pytorch_relational_rank_model.py -m "NYSE" -ep 100 -up 0 -u 32 -rn "correlational" 
+```
 
-## Average
-
-| skip_n_steps | daily_investment | NASDAQ | NYSE |
-|---|---|---|---|
-| 0 | 100.00 | 57.427822 | 35.447433 | 
-| 30 | 100.00 | 55.723846 | 31.19346 |
+Note that training works using rolling windows --- `train_size=200, val_size=20, test_size=20` --- and the number of windows is dynamically calculated by `num_steps \ train_size`. This results in each timestep being included in no more than 1 sliding window for `ep=100` epochs each. 
