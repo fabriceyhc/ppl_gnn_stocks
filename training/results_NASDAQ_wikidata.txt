@@ -1,0 +1,77 @@
+(base) C:\Users\Fabrice\Documents\GitHub\ppl_gnn_stocks\training>python pytorch_relational_rank_model.py -m "NASDAQ" -ep 100 -rn "wikidata" -g 0
+** training on cpu **
+arguments: Namespace(a=1, emb_file='NASDAQ_rank_lstm_seq-16_unit-64_2.csv.npy', epochs=100, gpu=False, inner_prod=False, l=4, m='NASDAQ', p='../data/2013-01-01', r=0.001, rel_name='wikidata', s=1, save_model=True, save_model_path='pretrained_model', t='NASDAQ_tickers_qualify_dr-0.98_min-5_smooth.csv', test_size=20, train_size=200, u=64, use_pretrain=1, val_size=20)
+params: {'seq': 4, 'unit': 64, 'lr': 0.001, 'alpha': 1.0}
+#tickers selected: 1026
+relation encoding shape: (1026, 1026, 43)
+relation encoding shape: torch.Size([1026, 1026, 43])
+relation mask shape: torch.Size([1026, 1026])
+loading model pretrained_model\model_100epochs_window6_NASDAQ_wikidata_loss0.67_2020-06-17.pth
+num_windows: 6
+training complete
+begin evaluation
+window:  1
+start_idx:       0
+train_range:     196
+valid_range:     216
+test_range:      236
+window_MSE: 0.0005301909986883402
+window_pred_return: 323.54168701171875
+window_earn_return: 103.70750427246094
+window_best_return: 278.4093017578125
+window_mean_return: -0.08708011358976364
+window:  2
+start_idx:       196
+train_range:     392
+valid_range:     412
+test_range:      432
+window_MSE: 0.0003553458664100617
+window_pred_return: 364.6790466308594
+window_earn_return: 55.07350158691406
+window_best_return: 257.5941162109375
+window_mean_return: -0.488301545381546
+window:  3
+start_idx:       392
+train_range:     588
+valid_range:     608
+test_range:      628
+window_MSE: 0.00061417295364663
+window_pred_return: 485.3509826660156
+window_earn_return: 39.070457458496094
+window_best_return: 217.72177124023438
+window_mean_return: -0.44632336497306824
+window:  4
+start_idx:       588
+train_range:     784
+valid_range:     804
+test_range:      824
+window_MSE: 0.000563659006729722
+window_pred_return: 447.112060546875
+window_earn_return: 89.86134338378906
+window_best_return: 261.263427734375
+window_mean_return: 0.21958322823047638
+window:  5
+start_idx:       784
+train_range:     980
+valid_range:     1000
+test_range:      1020
+window_MSE: 0.00046444314648397267
+window_pred_return: 347.561279296875
+window_earn_return: 148.70269775390625
+window_best_return: 302.0916748046875
+window_mean_return: 0.5476897358894348
+window:  6
+start_idx:       980
+train_range:     1176
+valid_range:     1196
+test_range:      1210
+window_MSE: 0.00042214899440295994
+window_pred_return: 218.52078247070312
+window_earn_return: 160.7231903076172
+window_best_return: 235.29896545410156
+window_mean_return: -0.18249842524528503
+total_MSE: 0.0004953186144120991
+total_pred_return: 2186.76611328125
+total_earn_return: 597.1387939453125
+total_best_return: 1552.3790283203125
+total_mean_return: -0.08708013594150543

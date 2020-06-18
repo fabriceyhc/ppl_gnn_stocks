@@ -1,0 +1,77 @@
+(base) C:\Users\Fabrice\Documents\GitHub\ppl_gnn_stocks\training>python pytorch_relational_rank_model.py -m "NYSE" -ep 100 -u 32 -rn "sector_industry" -g 0
+** training on cpu **
+arguments: Namespace(a=1, emb_file='NASDAQ_rank_lstm_seq-16_unit-64_2.csv.npy', epochs=100, gpu=False, inner_prod=False, l=4, m='NYSE', p='../data/2013-01-01', r=0.001, rel_name='sector_industry', s=1, save_model=True, save_model_path='pretrained_model', t='NYSE_tickers_qualify_dr-0.98_min-5_smooth.csv', test_size=20, train_size=200, u='32', use_pretrain=1, val_size=20)
+params: {'seq': 4, 'unit': 32, 'lr': 0.001, 'alpha': 1.0}
+#tickers selected: 1737
+relation encoding shape: (1737, 1737, 108)
+relation encoding shape: torch.Size([1737, 1737, 108])
+relation mask shape: torch.Size([1737, 1737])
+loading model pretrained_model\model_100epochs_window2_NYSE_sector_industry_loss0.38_2020-06-17.pth
+num_windows: 6
+training complete
+begin evaluation
+window:  1
+start_idx:       0
+train_range:     196
+valid_range:     216
+test_range:      236
+window_MSE: 0.00012146175868110731
+window_pred_return: 226.1595916748047
+window_earn_return: 210.04563903808594
+window_best_return: 280.24932861328125
+window_mean_return: -0.3624827265739441
+window:  2
+start_idx:       196
+train_range:     392
+valid_range:     412
+test_range:      432
+window_MSE: 0.00014189010835252702
+window_pred_return: 135.8872528076172
+window_earn_return: 142.35462951660156
+window_best_return: 191.30825805664062
+window_mean_return: -0.029715141281485558
+window:  3
+start_idx:       392
+train_range:     588
+valid_range:     608
+test_range:      628
+window_MSE: 0.0001826155057642609
+window_pred_return: 367.1487121582031
+window_earn_return: 169.45126342773438
+window_best_return: 325.7592468261719
+window_mean_return: -0.4175759255886078
+window:  4
+start_idx:       588
+train_range:     784
+valid_range:     804
+test_range:      824
+window_MSE: 0.000301850464893505
+window_pred_return: 807.947021484375
+window_earn_return: 33.73838424682617
+window_best_return: 235.53732299804688
+window_mean_return: 0.007674853783100843
+window:  5
+start_idx:       784
+train_range:     980
+valid_range:     1000
+test_range:      1020
+window_MSE: 0.0001939824433065951
+window_pred_return: 452.9850158691406
+window_earn_return: 112.0252456665039
+window_best_return: 275.487060546875
+window_mean_return: 0.7572153806686401
+window:  6
+start_idx:       980
+train_range:     1176
+valid_range:     1196
+test_range:      1210
+window_MSE: 0.0001956853229785338
+window_pred_return: 360.58502197265625
+window_earn_return: 114.74476623535156
+window_best_return: 359.0582275390625
+window_mean_return: -0.03162967786192894
+total_MSE: 0.00018925967742688954
+total_pred_return: 2350.712646484375
+total_earn_return: 782.3599243164062
+total_best_return: 1667.3995361328125
+total_mean_return: -0.36248284578323364
