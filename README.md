@@ -16,7 +16,7 @@ The current Wiki & Industry relation matrices from [TRSR](https://github.com/ful
 ```
 tar zxvf relation.tar.gz
 ```
-
+Directory after extraction (including the correlational tensors from this repo):
 ```
 data
      relation
@@ -62,7 +62,7 @@ Extract the file into the `data` directory:
 ```
 tar zxvf pretrain.tar.gz
 ```
-
+Directory after extraction:
 ```
 data
      pretrain
