@@ -1,7 +1,7 @@
 # ppl_gnn_stocks
 Final project repo for UCLA CS 267A
 
-[scratch_pad.ipynb (colab)](https://colab.research.google.com/drive/1BYBE7WeGu4jv2cFyD6LZR5u5ToVV1cok?usp=sharing) # use this notebook to test functions collaboratively
+[scratch_pad.ipynb (colab)](https://colab.research.google.com/drive/1g_qK-H78nIF5re4jgve9Zq8UoFQIG8bC?usp=sharing) # use this notebook to test functions collaboratively
 
 [gnn_tutorial.ipynb (colab)](https://colab.research.google.com/drive/11kPl_81fmaIqoUH48Ozl3N83uXqL7xXO) # use this notebook for examples of GNN applications
 
