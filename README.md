@@ -87,3 +87,9 @@ python pytorch_relational_rank_model.py -m "NYSE" -ep 100 -up 0 -u 32 -rn "corre
 Note that training works using rolling windows --- `train_size=200, val_size=20, test_size=20` --- and the number of windows is dynamically calculated by `num_steps \ train_size`. This results in each timestep being included in no more than 1 sliding window for `ep=100` epochs each. 
 
 NOTE: In our original paper, the NYSE sector_industry training only completed 2 windows. The `results_analysis.ipynb` now contains the results which include the complete training and shows significantly improved stock prediction performance. 
+
+# Results
+
+The results indicate that our correlational approach --- which *only* makes use of the stock data itself, no webscraped relational feature vectors --- can effectively approximate the relationships between companies and their stock price movements. All approaches outperform a simple buy-hold strategy that invests in the entire index by identifying top performing stocks that are approximately 35% of optimal for NASDAQ and 75% of optimal for NYSE. Optimal means that the model picked the top performing stock to invest in at every possible timestep, so the results are highly encouraging for all relational approaches and especially ours as it requires no extensive data collection efforts from various external sources. 
+
+![NASDAQ comparisons](/imgs/NASDAQ_comparisons.png?raw=true)  ![NYSE comparisons](/imgs/NYSE_comparisons2.png?raw=true)
