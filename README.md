@@ -85,3 +85,5 @@ python pytorch_relational_rank_model.py -m "NYSE" -ep 100 -up 0 -u 32 -rn "corre
 ```
 
 Note that training works using rolling windows --- `train_size=200, val_size=20, test_size=20` --- and the number of windows is dynamically calculated by `num_steps \ train_size`. This results in each timestep being included in no more than 1 sliding window for `ep=100` epochs each. 
+
+NOTE: In our original paper, the NYSE sector_industry training only completed 2 windows. The `results_analysis.ipynb` now contains the results which include the complete training and shows significantly improved stock prediction performance. 
