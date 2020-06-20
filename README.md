@@ -1,10 +1,11 @@
 # ppl_gnn_stocks
 Final project repo for UCLA CS 267A
 
+[scratch_pad.ipynb (colab)](https://colab.research.google.com/drive/1BYBE7WeGu4jv2cFyD6LZR5u5ToVV1cok?usp=sharing) # use this notebook to test functions collaboratively
 
-[colab](https://colab.research.google.com/drive/1f8UDNfQdb_fGI3jcMfwl-70rRr-aSOCA#scrollTo=c20pAMkoOo1H) # use this notebook to test functions collaboratively
+[gnn_tutorial.ipynb (colab)](https://colab.research.google.com/drive/11kPl_81fmaIqoUH48Ozl3N83uXqL7xXO) # use this notebook for examples of GNN applications
 
-[tutorials_colab](https://colab.research.google.com/drive/11kPl_81fmaIqoUH48Ozl3N83uXqL7xXO) # use this notebook for examples of GNN applications
+[pyro_stocks.ipynb (colab)](https://colab.research.google.com/drive/1f8UDNfQdb_fGI3jcMfwl-70rRr-aSOCA#scrollTo=c20pAMkoOo1H) # use this notebook to check out stock modeling with Pyro
 
 # Datasets
 
@@ -15,10 +16,15 @@ The current Wiki & Industry relation matrices from [TRSR](https://github.com/ful
 ```
 tar zxvf relation.tar.gz
 ```
-
+Directory after extraction (including the correlational tensors from this repo):
 ```
 data
      relation
+          correlations_trained
+               NASDAQ
+                    ...1215 files uploaded
+               NYSE
+                    ...1215 files not uploaded (too big)
           sector_industry
                NASDAQ_industry_ticker.json
                NYSE_industry_ticker.json
@@ -56,7 +62,7 @@ Extract the file into the `data` directory:
 ```
 tar zxvf pretrain.tar.gz
 ```
-
+Directory after extraction:
 ```
 data
      pretrain
@@ -64,20 +70,18 @@ data
           NYSE_rank_lstm_seq-8_unit-32_0.csv.npy
 ```
 
-# Target Returns
+# Run
 
-We present the target returns for two values of `skip_n_steps` because our relational tensor truncates the first `n` points for the correlations starting at `T-n` where `T` is the total number of timesteps under evaluation. The amounts reflect a policy of buying the `daily_investment` amount of the target stock(s) at each timestep and selling them at the same timestep. This removes the effect of compounding returns. 
+Below are the commands used to generate the results for this project.
 
-## Optimal
+```
+python pytorch_relational_rank_model.py -m "NASDAQ" -ep 100 -up 0 -rn "sector_industry" 
+python pytorch_relational_rank_model.py -m "NASDAQ" -ep 100 -up 0 -rn "wikidata" 
+python pytorch_relational_rank_model.py -m "NASDAQ" -ep 100 -up 0 -rn "correlational" 
 
-| skip_n_steps | daily_investment | NASDAQ | NYSE |
-|---|---|---|---|
-| 0 | 100.00 | 20102.418 | 16884.516 | 
-| 30 | 100.00 | 19622.406 | 16482.426 |
+python pytorch_relational_rank_model.py -m "NYSE" -ep 100 -up 0 -u 32 -rn "sector_industry" 
+python pytorch_relational_rank_model.py -m "NYSE" -ep 100 -up 0 -u 32 -rn "wikidata" 
+python pytorch_relational_rank_model.py -m "NYSE" -ep 100 -up 0 -u 32 -rn "correlational" 
+```
 
-## Average
-
-| skip_n_steps | daily_investment | NASDAQ | NYSE |
-|---|---|---|---|
-| 0 | 100.00 | 57.427822 | 35.447433 | 
-| 30 | 100.00 | 55.723846 | 31.19346 |
+Note that training works using rolling windows --- `train_size=200, val_size=20, test_size=20` --- and the number of windows is dynamically calculated by `num_steps \ train_size`. This results in each timestep being included in no more than 1 sliding window for `ep=100` epochs each. 
