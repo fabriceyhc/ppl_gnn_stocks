@@ -55,7 +55,7 @@ NOTE: This will take a long time to execute and will result in massive tensors (
 
 # Pretrained Weights
 
-The pretrained weights were too large to store in this repository, but they can be accessed [here](https://drive.google.com/file/d/1HpAsHH4oGdLrWeOby17pjVv3uIMe1TGh/view) or [here](https://drive.google.com/file/d/1fyNCZ62pEItTQYEBzLwsZ9ehX_-Ai3qT/view).
+The pretrained weights were too large to store in this repository, but they can be accessed [here](https://drive.google.com/file/d/1fyNCZ62pEItTQYEBzLwsZ9ehX_-Ai3qT/view).
 
 Extract the file into the `data` directory:
 
